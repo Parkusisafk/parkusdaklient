@@ -1,0 +1,18 @@
+[
+  {
+    "modid": "${modid}",
+    "name": "ParkusDaKlient",
+    "description": "Ignore this. Please",
+    "version": "${version}",
+    "mcversion": "${mcversion}",
+    "url": "will put later",
+    "updateUrl": "",
+    "authorList": [
+      "parkusdaking"
+    ],
+    "credits": "",
+    "logoFile": "assets/parkusdaklient/logo.png",
+    "screenshots": [],
+    "dependencies": []
+  }
+]
