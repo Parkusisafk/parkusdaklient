@@ -4,6 +4,7 @@ import com.github.parkusisafk.parkusdaklient.SkyblockMod;
 import com.github.parkusisafk.parkusdaklient.render.QuicksandFontRenderer;
 import com.github.parkusisafk.parkusdaklient.tasks.BreakTask;
 import com.github.parkusisafk.parkusdaklient.tasks.Task;
+import com.github.parkusisafk.parkusdaklient.tasks.TeleportTask;
 import com.github.parkusisafk.parkusdaklient.tasks.WalkToTask;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiButton;
@@ -20,12 +21,12 @@ import java.util.List;
 public class GuiTaskMenu extends GuiScreen {
     private QuicksandFontRenderer f() { return SkyblockMod.QUICKSAND_14; }
 
-    private enum TaskType { WALK_TO, BREAK }
+    private enum TaskType { WALK_TO, BREAK, TELEPORT }
 
     private final EntityPlayer player;
     private TaskType selectedType = TaskType.WALK_TO;
 
-    private GuiButton btnWalkTo, btnBreak, btnExecute, btnExecuteLoop, btnExit, btnOk, btnClear, btnClearPrev;
+    private GuiButton btnTeleport, btnWalkTo, btnBreak, btnExecute, btnExecuteLoop, btnExit, btnOk, btnClear, btnClearPrev;
 
     private GuiTextField xField, yField, zField;
     private GuiTextField loopField; // loops input
@@ -69,7 +70,7 @@ public class GuiTaskMenu extends GuiScreen {
         btnClearPrev = new GuiButton(7, leftX, topY + step*4, 90, 20, "Clear Prev");
         btnClear     = new GuiButton(6, leftX, topY + step*5, 90, 20, "Clear");
         btnExit      = new GuiButton(4, leftX, topY + step*6, 90, 20, "Exit");
-
+        btnTeleport = new GuiButton(8,  leftX, topY + step*7, 90, 20, "Teleport");
         buttonList.add(btnWalkTo);
         buttonList.add(btnBreak);
         buttonList.add(btnExecute);
@@ -77,6 +78,7 @@ public class GuiTaskMenu extends GuiScreen {
         buttonList.add(btnClearPrev);
         buttonList.add(btnClear);
         buttonList.add(btnExit);
+        buttonList.add(btnTeleport);
 
         // Center: input fields + OK
         xField = new GuiTextField(10, fontRendererObj, centerX, topY + 15, 80, 18);
@@ -160,6 +162,8 @@ public class GuiTaskMenu extends GuiScreen {
             mc.displayGuiScreen(null);
         } else if (button == btnOk) {
             addTaskFromInputs();
+        } else if (button == btnTeleport) {
+            selectedType = TaskType.TELEPORT;
         }
     }
     private int parseLoops(String s, int def) {
@@ -179,6 +183,8 @@ public class GuiTaskMenu extends GuiScreen {
             return new WalkToTask(p);
         } else if (t instanceof BreakTask) {
             return new BreakTask(p);
+        } else if (t instanceof  TeleportTask) {
+            return new TeleportTask(p);
         }
         // Unknown task type; skip
         return null;
@@ -194,6 +200,15 @@ public class GuiTaskMenu extends GuiScreen {
             Task task;
 
             switch (selectedType) {
+                case TELEPORT:
+                    task = new TeleportTask(pos);
+                    if (mc.theWorld != null) {
+                        mc.thePlayer.addChatMessage(new ChatComponentText(
+                                "Queued TELEPORT on " +
+                                        mc.theWorld.getBlockState(pos).getBlock().getLocalizedName() +
+                                        " @ " + tx + "," + ty + "," + tz));
+                    }
+                    break;
                 case BREAK:
                     task = new BreakTask(pos); // has timeout default in your class
                     if (mc.theWorld != null) {
