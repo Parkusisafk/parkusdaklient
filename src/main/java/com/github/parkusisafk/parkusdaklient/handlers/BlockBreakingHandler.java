@@ -4,6 +4,7 @@ import com.github.parkusisafk.parkusdaklient.util.AimHelper;
 import com.github.parkusisafk.parkusdaklient.util.AimHelper.YawPitch;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.init.Blocks;
 import net.minecraft.util.*;
 import net.minecraftforge.common.MinecraftForge;
@@ -27,8 +28,8 @@ public class BlockBreakingHandler {
     private boolean active = false;
 
     // rotation speed ranges (deg per tick)
-    private float yawMin = 6.0f, yawRand = 10.0f;     // 2.5..6.0
-    private float pitchMin = 6.0f, pitchRand = 10.0f; // 2..5
+    private float yawMin = 5.0f, yawRand = 7.0f;     // 2.5..6.0
+    private float pitchMin = 5.0f, pitchRand = 7.0f; // 2..5
     private float deadzoneDeg = 10.0f;
     private double nearDistSq = 4.0; // very close if within 2 blocks
     private float slowFactorNear = 0.5f;
@@ -72,19 +73,71 @@ public class BlockBreakingHandler {
         unreachableTicks = 0;
     }
 
+    private boolean startedBreaking = false;
+    private int nextSwingTick = 0;
+    private final Random rand = new Random();
+    private boolean isFacingTarget(BlockPos target) {
+        Vec3 center = AimHelper.blockCenter(target);
+
+        double eyeX = mc.thePlayer.posX;
+        double eyeY = mc.thePlayer.posY + mc.thePlayer.getEyeHeight();
+        double eyeZ = mc.thePlayer.posZ;
+
+        YawPitch goal = AimHelper.lookAtPoint(eyeX, eyeY, eyeZ, center.xCoord, center.yCoord, center.zCoord);
+
+        float yawErr   = Math.abs(MathHelper.wrapAngleTo180_float(goal.yaw - mc.thePlayer.rotationYaw));
+        float pitchErr = Math.abs(goal.pitch - mc.thePlayer.rotationPitch);
+
+        // Define a small threshold (degrees) for acceptable aim error before moving forward
+        final float aimingThreshold = 5.0f;
+
+        return yawErr < aimingThreshold && pitchErr < aimingThreshold;
+    }
+
+    private void holdLeftClick() {
+        if (!mc.gameSettings.keyBindAttack.isKeyDown()) {
+            KeyBinding.setKeyBindState(mc.gameSettings.keyBindAttack.getKeyCode(), true);
+        }
+    }
+
+    private void releaseLeftClickIfHeld() {
+        if (mc.gameSettings.keyBindAttack.isKeyDown()) {
+            KeyBinding.setKeyBindState(mc.gameSettings.keyBindAttack.getKeyCode(), false);
+        }
+    }
+
+    private boolean isMining = false;  // Track if left click is currently held
+    public static boolean nextMiningTask = false;  // Optional: your logic to know next mining block
+
     @SubscribeEvent
     public void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
         if (!active) return;
-        if (mc.theWorld == null || mc.thePlayer == null || target == null) { cancel(); return; }
-
+        if (mc.theWorld == null || mc.thePlayer == null || target == null) {
+            cancel();
+            releaseLeftClickIfHeld();
+            return;
+        }
         // Optional safety: don't act with GUI open
         if (mc.currentScreen != null) return;
 
-        // Aim smoothly & randomly at target (center normally; face center when close)
-        facePosSmooth(target);
+        // Aim at block (you can swap this for smooth or humanlike rotation)
+        if (!isFacingTarget(target)) {
+            facePosSmooth(target);
+            if (isMining) {
+                releaseLeftClickIfHeld();
+                isMining = false;
+            }
+            return;
+        }
 
-        // Reachability & line-of-sight; also gives us the correct hit face
+        // Facing target: hold left click and start mining
+        if (!isMining) {
+            holdLeftClick();
+            isMining = true;
+        }
+
+        // Reachability & line-of-sight check (your existing logic)
         EnumFacing face = getReachableFace(target);
         if (face == null) {
             unreachableTicks++;
@@ -94,6 +147,8 @@ public class BlockBreakingHandler {
                                 target.getX() + "," + target.getY() + "," + target.getZ()
                 ));
                 cancel();
+                releaseLeftClickIfHeld();
+                isMining = false;
             }
             return; // wait until reachable
         }
@@ -103,12 +158,21 @@ public class BlockBreakingHandler {
         mc.playerController.onPlayerDamageBlock(target, face);
         if ((ticksElapsed & 3) == 0) mc.thePlayer.swingItem();
 
-        // Completion: air or state changed
+        // Check if block broken or changed
         IBlockState current = mc.theWorld.getBlockState(target);
         if (current.getBlock() == Blocks.air || !current.equals(originalState)) {
             mc.thePlayer.addChatMessage(new ChatComponentText(
                     "Block broken/changed at " + target.getX() + "," + target.getY() + "," + target.getZ()));
             cancel();
+
+            // Check if next task is mining; if yes, keep holding left click, else release
+            if(!nextMiningTask) {
+                releaseLeftClickIfHeld();
+                isMining = false;
+            }
+            else{
+                isMining = false;
+            }
             return;
         }
 
@@ -116,11 +180,14 @@ public class BlockBreakingHandler {
         ticksElapsed++;
         if (timeoutTicks > 0 && ticksElapsed >= timeoutTicks) {
             mc.thePlayer.addChatMessage(new ChatComponentText(
-                    "§eOH SHIT IS THIS A MACRO CHECK??? Breaking timed out after " + (timeoutTicks / 20.0) + "s @ " +
+                    "§eBreaking timed out after " + (timeoutTicks / 20.0) + "s @ " +
                             target.getX() + "," + target.getY() + "," + target.getZ()));
             cancel();
+            releaseLeftClickIfHeld();
+            isMining = false;
         }
     }
+
 
     /** Stable, smooth, randomized turn; avoids 360° snaps and flip-flop near target. */
     private void facePosSmooth(BlockPos p) {

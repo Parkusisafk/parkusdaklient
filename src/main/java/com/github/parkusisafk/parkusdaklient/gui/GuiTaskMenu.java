@@ -114,37 +114,32 @@ public class GuiTaskMenu extends GuiScreen {
         } else if (button == btnBreak) {
             selectedType = TaskType.BREAK;
         } else if (button == btnExecute) {
-            if (SkyblockMod.taskManager.getQueueSnapshot().isEmpty()) {
+            List<Task> snapshot = SkyblockMod.taskManager.getQueueSnapshot();
+            if (snapshot.isEmpty()) {
                 mc.thePlayer.addChatMessage(new ChatComponentText("§7No tasks queued."));
                 return;
             }
             // Close first, then start on next tick to ensure handlers see GUI closed
             mc.displayGuiScreen(null);
             net.minecraft.client.Minecraft.getMinecraft().addScheduledTask(
-                    () -> SkyblockMod.taskManager.executeAll()
+                    () -> SkyblockMod.taskManager.executeAll(1,snapshot)
             );
-        } else if (button == btnExecuteLoop) { // NEW
+        } else if (button == btnExecuteLoop) {
             int loops = parseLoops(loopField.getText(), 2);
             if (loops < 1) loops = 1;
             if (loops > 5000) loops = 5000; // safety cap
+
             List<Task> snapshot = SkyblockMod.taskManager.getQueueSnapshot();
             if (snapshot.isEmpty()) {
                 mc.thePlayer.addChatMessage(new ChatComponentText("§7No tasks queued."));
                 return;
             }
-            // Duplicate the snapshot (loops-1) times
-            for (int rep = 1; rep < loops; rep++) {
-                for (Task t : snapshot) {
-                    Task clone = cloneTask(t);
-                    if (clone != null) SkyblockMod.taskManager.add(clone);
-                }
-            }
-            // Start execution
+
             mc.displayGuiScreen(null);
             final int loopsFinal = loops;
             net.minecraft.client.Minecraft.getMinecraft().addScheduledTask(() -> {
                 mc.thePlayer.addChatMessage(new ChatComponentText("§aExecuting tasks x" + loopsFinal));
-                SkyblockMod.taskManager.executeAll();
+                SkyblockMod.taskManager.executeAll(loopsFinal, snapshot);
             });
         } else if (button == btnClearPrev) {
             Task removed = SkyblockMod.taskManager.removeLast();

@@ -33,8 +33,8 @@ public class MoveForwardHandler {
     private boolean wePressedForward = false;
 
     // Turning speed (degrees/tick), randomized each tick: min + rng*rand
-    private float yawMin = 6.0f,  yawRand = 10.0f;   // 2..5
-    private float pitchMin = 6.0f, pitchRand = 10.0f; // 2..5
+    private float yawMin = 10.0f,  yawRand = 10.0f;   // 2..5
+    private float pitchMin = 10.0f, pitchRand = 10.0f; // 2..5
 
     // Behavior near target
     private float deadzoneDeg = 10.0f;       // if yaw/pitch error < this, skip correction
@@ -65,6 +65,23 @@ public class MoveForwardHandler {
         safetyCap = safetyCapTicks;
         lookTarget = target;
     }
+    private boolean isFacingTarget(BlockPos target) {
+        Vec3 center = AimHelper.blockCenter(target);
+
+        double eyeX = mc.thePlayer.posX;
+        double eyeY = mc.thePlayer.posY + mc.thePlayer.getEyeHeight();
+        double eyeZ = mc.thePlayer.posZ;
+
+        YawPitch goal = AimHelper.lookAtPoint(eyeX, eyeY, eyeZ, center.xCoord, center.yCoord, center.zCoord);
+
+        float yawErr   = Math.abs(MathHelper.wrapAngleTo180_float(goal.yaw - mc.thePlayer.rotationYaw));
+        float pitchErr = Math.abs(goal.pitch - mc.thePlayer.rotationPitch);
+
+        // Define a small threshold (degrees) for acceptable aim error before moving forward
+        final float aimingThreshold = 5.0f;
+
+        return yawErr < aimingThreshold && pitchErr < aimingThreshold;
+    }
 
     @SubscribeEvent
     public void onClientTick(TickEvent.ClientTickEvent event) {
@@ -88,8 +105,16 @@ public class MoveForwardHandler {
         }
 
         if (shouldMove) {
-            if (lookTarget != null) facePosSmooth(lookTarget);
-            setForward(true, false);
+            if (lookTarget != null) {
+                facePosSmooth(lookTarget);
+
+                // Check if player is "aimed" sufficiently at target before moving forward
+                if (isFacingTarget(lookTarget)) {
+                    setForward(true, false);
+                } else {
+                    setForward(false, false);
+                }
+            }
         } else {
             setForward(false, false);
         }
@@ -102,6 +127,7 @@ public class MoveForwardHandler {
             if (!Keyboard.isKeyDown(forwardKey)) {
                 KeyBinding.setKeyBindState(forwardKey, true);
                 wePressedForward = true;
+
             }
         } else {
             if ((wePressedForward && !Keyboard.isKeyDown(forwardKey)) || forceRelease) {

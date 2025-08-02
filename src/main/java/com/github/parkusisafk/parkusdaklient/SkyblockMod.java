@@ -1,10 +1,13 @@
 package com.github.parkusisafk.parkusdaklient;
 
+import com.github.parkusisafk.parkusdaklient.command.CommandMonitorWhitelist;
 import com.github.parkusisafk.parkusdaklient.command.CommandOpenMenu;
+import com.github.parkusisafk.parkusdaklient.command.CommandRemoveMonitorWhitelist;
 import com.github.parkusisafk.parkusdaklient.handlers.BlockBreakingHandler;
 import com.github.parkusisafk.parkusdaklient.handlers.ClientTickDispatcher;
 import com.github.parkusisafk.parkusdaklient.handlers.HighlightRenderHandler;
 import com.github.parkusisafk.parkusdaklient.handlers.MoveForwardHandler;
+import com.github.parkusisafk.parkusdaklient.macro.MacroCheckDetector;
 import com.github.parkusisafk.parkusdaklient.render.QuicksandFontRenderer;
 import com.github.parkusisafk.parkusdaklient.tasks.TaskManager;
 import com.github.parkusisafk.parkusdaklient.util.GuiOpener;
@@ -32,6 +35,7 @@ public class SkyblockMod {
 
     @EventHandler
     public void init(FMLInitializationEvent event) {
+
         // Register GUI handler
         NetworkRegistry.INSTANCE.registerGuiHandler(this, new GuiHandler());
         MinecraftForge.EVENT_BUS.register(new GuiOpener());
@@ -40,6 +44,7 @@ public class SkyblockMod {
         taskManager          = new TaskManager();
         clientTickDispatcher = new ClientTickDispatcher(taskManager, blockBreakingHandler);
         highlightRenderHandler = new HighlightRenderHandler(taskManager);
+        MinecraftForge.EVENT_BUS.register(MacroCheckDetector.INSTANCE);
 
         try {
             // load from assets: assets/parkusdaklient/fonts/Quicksand-Regular.ttf
@@ -55,5 +60,8 @@ public class SkyblockMod {
     public void serverLoad(FMLServerStartingEvent event) {
         // Register slash command
         event.registerServerCommand(new CommandOpenMenu());
+        event.registerServerCommand(new CommandMonitorWhitelist());
+        event.registerServerCommand(new CommandRemoveMonitorWhitelist());
+
     }
 }

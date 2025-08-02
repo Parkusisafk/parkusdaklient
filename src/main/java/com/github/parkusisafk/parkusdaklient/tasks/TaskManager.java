@@ -1,10 +1,17 @@
 package com.github.parkusisafk.parkusdaklient.tasks;
 
+import com.github.parkusisafk.parkusdaklient.handlers.BlockBreakingHandler;
+import com.github.parkusisafk.parkusdaklient.macro.MacroCheckDetector;
+import net.minecraft.util.BlockPos;
+
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 
 public class TaskManager {
     private final List<Task> queue = new ArrayList<>();
+    private List<Task> all = new ArrayList<>();    // new 'all' list for executeAll()
+
     private Task current = null;
 
     public void add(Task t) {
@@ -26,21 +33,60 @@ public class TaskManager {
 
     public int size() { return queue.size(); }
 
-    public void executeAll() {
-        if (current == null && !queue.isEmpty()) {
-            current = queue.remove(0);
+
+
+    public void executeAll(int times, List<Task> snapshot) {
+        if (times < 1) times = 1;
+        if (snapshot == null || snapshot.isEmpty()) return;
+
+        List<Task> tempAll = new ArrayList<>();
+        for (int i = 0; i < times; i++) {
+            for (Task t : snapshot) {
+                Task clone = cloneTask(t);
+                if (clone != null) tempAll.add(clone);
+            }
+        }
+        this.all = tempAll;  // assign to field 'all'
+        this.current = null;
+
+        if (!all.isEmpty()) {
+
+            current = all.remove(0);
+            MacroCheckDetector.moving = current instanceof WalkToTask;
+            if (!all.isEmpty() && all.get(0) instanceof  BreakTask) {
+                BlockBreakingHandler.nextMiningTask = true;
+            }
             current.start();
         }
     }
 
-    public void update() {
+
+    public void update(){
         if (current == null) return;
+
         current.update();
         if (current.isFinished()) {
             current = null;
-            if (!queue.isEmpty()) {
-                current = queue.remove(0);
+
+            // Only set flags *after* getting the next task
+            if (!all.isEmpty()) {
+                current = all.remove(0);
+
+                // Set movement flag if this is a Walk task
+                MacroCheckDetector.moving = current instanceof WalkToTask;
+
+                // Set mining flag if *next* task after current is Break
+                if (!all.isEmpty() && all.get(0) instanceof BreakTask) {
+                    BlockBreakingHandler.nextMiningTask = true;
+                } else {
+                    BlockBreakingHandler.nextMiningTask = false;
+                }
+
                 current.start();
+            } else {
+                // No more tasks: reset flags
+                MacroCheckDetector.moving = false;
+                BlockBreakingHandler.nextMiningTask = false;
             }
         }
     }
@@ -66,4 +112,39 @@ public class TaskManager {
         Task t = queue.remove(from);
         queue.add(to, t);
     }
+
+
+    private Task cloneTask(Task t) {
+        if (t instanceof WalkToTask) {
+            WalkToTask walk = (WalkToTask) t;
+            return new WalkToTask(getTarget(walk), getTimeout(walk));
+        }
+
+        if (t instanceof BreakTask) {
+            BreakTask b = (BreakTask) t;
+            return new BreakTask(getTarget(b), getTimeout(b));
+        }
+
+        if (t instanceof TeleportTask) {
+            TeleportTask tp = (TeleportTask) t;
+            return new TeleportTask(getTarget(tp));
+        }
+
+        return null; // unknown task type
+    }
+    BlockPos getTarget(Task t) {
+        return t.pos;
+    }
+
+    private int getTimeout(Task t) {
+        try {
+            Field f = t.getClass().getDeclaredField("timeoutTicks");
+            f.setAccessible(true);
+            return f.getInt(t);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return 200; // fallback default
+        }
+    }
+
 }

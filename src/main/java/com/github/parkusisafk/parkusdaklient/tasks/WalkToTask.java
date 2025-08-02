@@ -1,6 +1,7 @@
 package com.github.parkusisafk.parkusdaklient.tasks;
 
 import com.github.parkusisafk.parkusdaklient.SkyblockMod;
+import com.github.parkusisafk.parkusdaklient.macro.MacroCheckDetector;
 import net.minecraft.util.BlockPos;
 
 import java.util.Random;
@@ -38,6 +39,7 @@ public class WalkToTask extends Task {
 
     @Override
     public void start() {
+
         started = true;
         // Try walking until within stopRadius, with a safety cap equal to our timeout
         SkyblockMod.moveForwardHandler.moveWhileFacing(
@@ -64,6 +66,7 @@ public class WalkToTask extends Task {
         if (timeoutTicks > 0 && elapsed >= timeoutTicks) {
             done = true;
             SkyblockMod.moveForwardHandler.cancel();
+            MacroCheckDetector.moving = false;
             mc.thePlayer.addChatMessage(new net.minecraft.util.ChatComponentText(
                     String.format("§eOH SHIT IS THIS A MACRO CHECK??? Walk timed out after %ss to %d,%d,%d",
                             timeoutTicks / 20, pos.getX(), pos.getY(), pos.getZ())
@@ -73,6 +76,7 @@ public class WalkToTask extends Task {
 
     @Override
     public boolean isFinished() {
+
         return done;
     }
 }

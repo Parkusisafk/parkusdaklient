@@ -1,18 +1,27 @@
 package com.github.parkusisafk.parkusdaklient.mixin;
 
+import com.github.parkusisafk.parkusdaklient.macro.MacroCheckDetector;
 import com.github.parkusisafk.parkusdaklient.util.GuiOpener;
+import net.minecraft.block.Block;
+import net.minecraft.block.BlockAir;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
+import net.minecraft.util.BlockPos;
+import net.minecraft.util.ChatComponentText;
+import net.minecraft.util.MovingObjectPosition;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+import java.util.List;
 
 @Mixin(EntityPlayerSP.class)
 public class MixinEntityPlayerSP {
     static {
         System.out.println("[Mixin] MixinEntityPlayerSP loaded!");
     }
-
+Minecraft mc = Minecraft.getMinecraft();
     @Inject(method = "func_71165_d", at = @At("HEAD"), cancellable = true, remap = false)
     private void onSendChatMessage(String msg, CallbackInfo ci) {
         if (msg.equalsIgnoreCase(".mymenu")) {
@@ -21,5 +30,108 @@ public class MixinEntityPlayerSP {
             System.out.println(".mymenu is called by player!!!");
              ci.cancel(); // Don't send to server */
         }
+        else if(msg.contains(".macrocheck")){
+            try {
+                int mode = Integer.parseInt(msg.trim().split(" ")[1]);
+                com.github.parkusisafk.parkusdaklient.command.CommandMacroCheck.run(mode);
+            } catch (Exception e) {
+                mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §cUsage: .macrocheck <1-7>"));
+            }
+            ci.cancel(); // prevent command from reaching server
+        }
+        else if(msg.contains(".allowteleport")){
+            MacroCheckDetector.INSTANCE.setTeleporting(true);
+            mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §dDisabled Teleport Macro Check"));
+            ci.cancel();
+        }
+        else if(msg.contains(".disallowteleport")){
+            MacroCheckDetector.INSTANCE.setTeleporting(false);
+            mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §dEnabled Teleport Macro Check"));
+
+            ci.cancel();
+
+        }
+        else if (msg.startsWith(".monitorwhitelist ")) {
+            String[] parts = msg.trim().split(" ");
+            if (parts.length < 2) {
+                mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §cUsage: .monitorwhitelist <blockname>"));
+                ci.cancel();
+                return;
+            }
+
+            Block block = Block.getBlockFromName(parts[1]);
+            if (block == null || block instanceof BlockAir) {
+                mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §cInvalid block: " + parts[1]));
+            } else {
+                MacroCheckDetector.whitelistBlock(block);
+                boolean added = true;
+
+                mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] " +
+                        (added ? "§aAdded to whitelist: §f" + block : "§cAlready whitelisted.")));            }
+            ci.cancel();
+        }
+
+        else if (msg.startsWith(".removemonitorwhitelist ")) {
+            String[] parts = msg.trim().split(" ");
+            if (parts.length < 2) {
+                mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §cUsage: .removemonitorwhitelist <blockname>"));
+                ci.cancel();
+                return;
+            }
+
+            Block block = Block.getBlockFromName(parts[1]);
+            if (block == null || block instanceof BlockAir) {
+                mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §cInvalid block: " + parts[1]));
+            } else if (MacroCheckDetector.removeWhitelistedBlock(block)) {
+                boolean removed = true;
+                mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] " +
+                        (removed ? "§aRemoved from whitelist: §f" + block : "§cNot in whitelist.")));            } else {
+                mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §cBlock not in whitelist: " + parts[1]));
+            }
+            ci.cancel();
+        } else if (msg.equalsIgnoreCase(".getblockname")) {
+            Block lookingAt = null;
+            try {
+                MovingObjectPosition mop = mc.objectMouseOver;
+                if (mop != null && mop.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK) {
+                    BlockPos pos = mop.getBlockPos();
+                    lookingAt = mc.theWorld.getBlockState(pos).getBlock();
+                    String regName = Block.blockRegistry.getNameForObject(lookingAt).toString(); // registry name
+                    String displayName = lookingAt.getLocalizedName(); // display name
+
+                    mc.thePlayer.addChatMessage(new ChatComponentText(
+                            "§b[ParkusDaKlient] §eBlock: §a" + regName + " §7(" + displayName + ")"
+                    ));
+                } else {
+                    mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §cYou're not looking at a block."));
+                }
+            } catch (Exception e) {
+                mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §cFailed to get block name."));
+                e.printStackTrace();
+            }
+            ci.cancel();
+        } else if (msg.equalsIgnoreCase(".listmonitorwhitelist")) {
+            List<Block> whitelist = MacroCheckDetector.getWhitelistedBlocks();
+            if (whitelist.isEmpty()) {
+                mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §7No blocks are whitelisted."));
+            } else {
+                mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §7Whitelisted blocks:"));
+                for (Block block : whitelist) {
+                    String regName = Block.blockRegistry.getNameForObject(block).toString();
+                    mc.thePlayer.addChatMessage(new ChatComponentText("§7- §a" + regName));
+                }
+            }
+            ci.cancel();
+        } else if (msg.equalsIgnoreCase(".allowmacrodetection")){
+            MacroCheckDetector.activeMacroDetection = true;
+            mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §d§lEnabled Macro Check Detection!"));
+            ci.cancel();
+        } else if (msg.equalsIgnoreCase(".disallowmacrodetection")){
+            MacroCheckDetector.activeMacroDetection = false;
+            mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §d§lDisabled Macro Check Detection!"));
+            ci.cancel();
+        }
+
+
     }
 }
