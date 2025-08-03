@@ -33,9 +33,9 @@ public class BlockBreakingHandler {
     private boolean active = false;
 
     // rotation speed ranges (deg per tick)
-    private float yawMin = 5.0f, yawRand = 7.0f;     // 2.5..6.0
-    private float pitchMin = 5.0f, pitchRand = 7.0f; // 2..5
-    private float deadzoneDeg = 10.0f;
+    private float yawMin = 8.0f, yawRand = 8.0f;     // 2.5..6.0
+    private float pitchMin = 8.0f, pitchRand = 8.0f; // 2..5
+    private float deadzoneDeg = 8.0f;
     private double nearDistSq = 4.0; // very close if within 2 blocks
     private float slowFactorNear = 0.5f;
 
@@ -178,7 +178,7 @@ public class BlockBreakingHandler {
                         face.getFrontOffsetZ() * 0.5);
 
         // Nudge slightly toward the block's center (but not all the way)
-        final double inwardOffset = -0.05; // Move 5% inside the block
+        final double inwardOffset = 0.05; // Move 5% inside the block
         Vec3 nudge = new Vec3(face.getFrontOffsetX() * inwardOffset,
                 face.getFrontOffsetY() * inwardOffset,
                 face.getFrontOffsetZ() * inwardOffset);
@@ -440,17 +440,17 @@ public class BlockBreakingHandler {
         double closestDist = Double.MAX_VALUE;
 
         for (EnumFacing face : EnumFacing.values()) {
-            // Start from face center, but bias slightly inward (0.49 instead of 0.5)
-            Vec3 faceCenter = new Vec3(target).addVector(0.5, 0.5, 0.5)
-                    .addVector(face.getFrontOffsetX() * 0.49,
-                            face.getFrontOffsetY() * 0.49,
-                            face.getFrontOffsetZ() * 0.49);
+            // Center of the block face + slight inward offset
+            Vec3 facePoint = new Vec3(target).addVector(0.5, 0.5, 0.5)
+                    .addVector(face.getFrontOffsetX() * 0.45,
+                            face.getFrontOffsetY() * 0.45,
+                            face.getFrontOffsetZ() * 0.45);
 
-            double dist = eyePos.distanceTo(faceCenter);
+            double dist = eyePos.distanceTo(facePoint);
             if (dist > maxReach) continue;
 
-            // Less strict trace to allow for tight angles
-            MovingObjectPosition hit = world.rayTraceBlocks(eyePos, faceCenter, false, false, true);
+            // rayTrace with leniency (ignoreBlockWithoutBoundingBox = true)
+            MovingObjectPosition hit = world.rayTraceBlocks(eyePos, facePoint, false, true, false);
             if (hit != null && target.equals(hit.getBlockPos()) && hit.sideHit == face) {
                 if (dist < closestDist) {
                     bestHit = hit;
@@ -461,6 +461,7 @@ public class BlockBreakingHandler {
 
         return bestHit;
     }
+
 
 
 

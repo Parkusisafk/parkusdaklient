@@ -1,11 +1,13 @@
 package com.github.parkusisafk.parkusdaklient.mixin;
 
+import com.github.parkusisafk.parkusdaklient.command.CommandBreakTask;
 import com.github.parkusisafk.parkusdaklient.macro.MacroCheckDetector;
 import com.github.parkusisafk.parkusdaklient.util.GuiOpener;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockAir;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
+import net.minecraft.init.Blocks;
 import net.minecraft.util.BlockPos;
 import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.MovingObjectPosition;
@@ -14,7 +16,10 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 
 @Mixin(EntityPlayerSP.class)
 public class MixinEntityPlayerSP {
@@ -130,7 +135,34 @@ Minecraft mc = Minecraft.getMinecraft();
             MacroCheckDetector.activeMacroDetection = false;
             mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §d§lDisabled Macro Check Detection!"));
             ci.cancel();
+        } else if (msg.startsWith(".breaktask")){
+            MacroCheckDetector.activeMacroDetection = false;
+
+            String[] parts = msg.trim().split(" ");
+            if (parts.length < 2) {
+                mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §cUsage: .breaktask <blockname>"));
+                ci.cancel();
+                return;
+            }
+
+
+            Set<Block> targetBlocks = new HashSet<>();
+
+            for (String xxxyyy : parts){
+                if(Objects.equals(xxxyyy, ".breaktask")) continue;
+                Block block = Block.getBlockFromName(xxxyyy);
+                if (block == null || block == Blocks.air) {
+                    mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §cInvalid Block Name " + xxxyyy + "!"));
+                    ci.cancel();
+                    return;
+                }
+                targetBlocks.add(block);
+
+            }
+            CommandBreakTask.run(targetBlocks);
+            ci.cancel();
         }
+
 
 
     }

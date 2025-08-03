@@ -257,7 +257,7 @@ public static boolean activeMacroDetection = false;
                     continuousweirdvelocity++;
                     if(continuousweirdvelocity>15){
                         DetectedMacroCheck.alert("Unnatural movement direction detected.");
-
+                        continuousweirdvelocity = 0;
                     }
 
                 } else continuousweirdvelocity = 0;
@@ -278,8 +278,9 @@ public static boolean activeMacroDetection = false;
                 System.out.println(velocityMagnitude);
                 if(continuousweirdvelocity>15) {
                     DetectedMacroCheck.alert("Unnatural movement direction detected while not moving.");
+                    continuousweirdvelocity = 0;
                 }
-            }
+            } else continuousweirdvelocity = 0;
 
         }
     }
