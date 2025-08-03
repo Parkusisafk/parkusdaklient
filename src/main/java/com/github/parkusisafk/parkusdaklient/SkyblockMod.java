@@ -17,7 +17,7 @@ import net.minecraftforge.fml.common.Mod.EventHandler;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLServerStartingEvent;
 import net.minecraftforge.fml.common.network.NetworkRegistry;
-
+import net.minecraftforge.common.MinecraftForge;
 
 @Mod(modid = SkyblockMod.MODID, name = "ParkusDaKlient", version = SkyblockMod.VERSION)
 public class SkyblockMod {
@@ -39,6 +39,7 @@ public class SkyblockMod {
         // Register GUI handler
         NetworkRegistry.INSTANCE.registerGuiHandler(this, new GuiHandler());
         MinecraftForge.EVENT_BUS.register(new GuiOpener());
+        MinecraftForge.EVENT_BUS.register(BlockBreakingHandler.INSTANCE);
         moveForwardHandler = new MoveForwardHandler(); // constructor handles registration
         blockBreakingHandler = new BlockBreakingHandler(); // self-registers
         taskManager          = new TaskManager();
