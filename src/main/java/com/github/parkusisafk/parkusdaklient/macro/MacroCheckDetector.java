@@ -215,10 +215,12 @@ public static boolean activeMacroDetection = false;
                     String type = entity.getClass().getSimpleName();
 
                     if (!allowedEntities.contains(type)) {
-                        DetectedMacroCheck.alert("Unusual entity nearby: " + type);
+                        // Check if player can see this entity
+                        if (player.canEntityBeSeen(entity)) {
+                            DetectedMacroCheck.alert("Unusual visible entity nearby: " + type);
+                        }
                     }
                 }
-
             }
 
         }

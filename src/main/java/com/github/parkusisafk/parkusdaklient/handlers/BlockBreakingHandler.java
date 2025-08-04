@@ -2,10 +2,12 @@ package com.github.parkusisafk.parkusdaklient.handlers;
 
 import com.github.parkusisafk.parkusdaklient.util.AimHelper;
 import com.github.parkusisafk.parkusdaklient.util.AimHelper.YawPitch;
+import net.minecraft.block.Block;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.client.settings.KeyBinding;
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.init.Blocks;
 import net.minecraft.util.*;
 import net.minecraft.world.World;
@@ -15,7 +17,10 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import org.lwjgl.opengl.GL11;
 
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Random;
+import java.util.Set;
 
 /**
  * Stable auto-break:
@@ -35,7 +40,7 @@ public class BlockBreakingHandler {
     // rotation speed ranges (deg per tick)
     private float yawMin = 8.0f, yawRand = 8.0f;     // 2.5..6.0
     private float pitchMin = 8.0f, pitchRand = 8.0f; // 2..5
-    private float deadzoneDeg = 8.0f;
+    private float deadzoneDeg = 0.5f;
     private double nearDistSq = 4.0; // very close if within 2 blocks
     private float slowFactorNear = 0.5f;
 
@@ -170,21 +175,14 @@ public class BlockBreakingHandler {
         // Fallback to angular check if raytrace fails
         return yawErr < aimingThreshold && pitchErr < aimingThreshold;
     }
-    private Vec3 getAimPointSlightlyInsideFace(BlockPos pos, EnumFacing face) {
-        // Start with face center
-        Vec3 faceCenter = new Vec3(pos).addVector(0.5, 0.5, 0.5)
-                .addVector(face.getFrontOffsetX() * 0.5,
-                        face.getFrontOffsetY() * 0.5,
-                        face.getFrontOffsetZ() * 0.5);
-
-        // Nudge slightly toward the block's center (but not all the way)
-        final double inwardOffset = 0.05; // Move 5% inside the block
-        Vec3 nudge = new Vec3(face.getFrontOffsetX() * inwardOffset,
-                face.getFrontOffsetY() * inwardOffset,
-                face.getFrontOffsetZ() * inwardOffset);
-
-        return faceCenter.add(nudge);
+    public static Vec3 getAimPointSlightlyInsideFace(BlockPos pos, EnumFacing face) {
+        // Center of block + face offset (just inside face)
+        return new Vec3(pos).addVector(0.5, 0.5, 0.5)
+                .addVector(face.getFrontOffsetX() * 0.49,
+                        face.getFrontOffsetY() * 0.49,
+                        face.getFrontOffsetZ() * 0.49);
     }
+
 
 
     private boolean simpleAimCheck(BlockPos pos) {
@@ -214,43 +212,45 @@ public class BlockBreakingHandler {
         }
     }
 
-    private boolean faceUntilFacingTarget(MovingObjectPosition hit) {
-        if (hit == null) return false;
+    private boolean faceUntilFacingTarget(Vec3 aimPoint) {
+        if (aimPoint == null) return false;
 
-        BlockPos pos = hit.getBlockPos();
-        Vec3 aimPoint = getAimPointSlightlyInsideFace(pos,hit.sideHit); // fallback: use face center if null
-        if (aimPoint == null) aimPoint = new Vec3(pos).addVector(0.5, 0.5, 0.5)
-                .addVector(hit.sideHit.getFrontOffsetX() * 0.5,
-                        hit.sideHit.getFrontOffsetY() * 0.5,
-                        hit.sideHit.getFrontOffsetZ() * 0.5);
+        Vec3 eye = new Vec3(
+                mc.thePlayer.posX,
+                mc.thePlayer.posY + mc.thePlayer.getEyeHeight(),
+                mc.thePlayer.posZ
+        );
 
-        double ex = mc.thePlayer.posX;
-        double ey = mc.thePlayer.posY + mc.thePlayer.getEyeHeight();
-        double ez = mc.thePlayer.posZ;
+        // Sanity check: is this aim point actually visible?
 
-        AimHelper.YawPitch goal = AimHelper.lookAtPoint(ex, ey, ez, aimPoint.xCoord, aimPoint.yCoord, aimPoint.zCoord);
+
+        AimHelper.YawPitch goal = AimHelper.lookAtPoint(
+                eye.xCoord, eye.yCoord, eye.zCoord,
+                aimPoint.xCoord, aimPoint.yCoord, aimPoint.zCoord
+        );
+
         float yawErr = Math.abs(MathHelper.wrapAngleTo180_float(goal.yaw - mc.thePlayer.rotationYaw));
         float pitchErr = Math.abs(goal.pitch - mc.thePlayer.rotationPitch);
-
         boolean facing = yawErr < deadzoneDeg && pitchErr < deadzoneDeg;
         if (facing) return true;
 
-        // Apply smooth stepping
+        // Smooth rotate toward goal
         float yawSpeed = yawMin + rng.nextFloat() * yawRand;
         float pitchSpeed = pitchMin + rng.nextFloat() * pitchRand;
 
         float nextYaw = AimHelper.stepYawTowards(mc.thePlayer.rotationYaw, goal.yaw, yawSpeed);
         float nextPitch = AimHelper.stepPitchTowards(mc.thePlayer.rotationPitch, goal.pitch, pitchSpeed);
 
-        // Fix sudden wrap seam
+        // Fix for yaw seam wrap
         float seamDelta = Math.abs(MathHelper.wrapAngleTo180_float(nextYaw - mc.thePlayer.rotationYaw));
         if (seamDelta > 170f) mc.thePlayer.prevRotationYaw = mc.thePlayer.rotationYaw;
 
         mc.thePlayer.rotationYaw = nextYaw;
         mc.thePlayer.rotationPitch = nextPitch;
 
-        return false; // not facing yet
+        return false;
     }
+
 
 
     private boolean isMining = false;  // Track if left click is currently held
@@ -272,20 +272,16 @@ public class BlockBreakingHandler {
 
         if(cooldownbetweenmining > 0){ cooldownbetweenmining--; return;}
 
-        MovingObjectPosition result = getReachableVisibleFace(mc.thePlayer, mc.theWorld, target);
+        AimPoint result = getReachableVisibleFace(mc.thePlayer, mc.theWorld, target);
 
         if (result != null) {
             BlockPos resultPos = result.getBlockPos();
 
-            // Debug draw line to face
+            // Debug: draw line from eye to aim point
             this.debugLineStart = mc.thePlayer.getPositionEyes(1.0f);
-            Vec3 faceCenter = new Vec3(resultPos).addVector(0.5, 0.5, 0.5)
-                    .addVector(result.sideHit.getFrontOffsetX() * 0.5,
-                            result.sideHit.getFrontOffsetY() * 0.5,
-                            result.sideHit.getFrontOffsetZ() * 0.5);
-            this.debugLineEnd = faceCenter;
+            this.debugLineEnd = result.vec;
 
-            if (!faceUntilFacingTarget(result)) {
+            if (!faceUntilFacingTarget(result.vec)) {
                 if (isMining && !nextMiningTask) {
                     releaseLeftClickIfHeld();
                     isMining = false;
@@ -427,40 +423,119 @@ public class BlockBreakingHandler {
         return dx*dx + dy*dy + dz*dz;
     }
 
+    public static class AimPoint {
+        public final Vec3 vec;
+        public final EnumFacing sideHit;
 
-    private static MovingObjectPosition getReachableVisibleFace(EntityPlayerSP player, World world, BlockPos target) {
-        Vec3 eyePos = new Vec3(
-                player.posX,
-                player.posY + player.getEyeHeight(),
-                player.posZ
-        );
+        public AimPoint(Vec3 vec, EnumFacing sideHit) {
+            this.vec = vec;
+            this.sideHit = sideHit;
+        }
 
-        double maxReach = 4.5;
-        MovingObjectPosition bestHit = null;
-        double closestDist = Double.MAX_VALUE;
+        public BlockPos getBlockPos() {
+            return new BlockPos(vec);
+        }
+    }
+    public static AimPoint getReachableVisibleFace(EntityPlayer player, World world, BlockPos target) {
+        Vec3 eyePos = new Vec3(player.posX, player.posY + player.getEyeHeight(), player.posZ);
+        IBlockState state = world.getBlockState(target);
+        Block block = state.getBlock();
 
+        // Check if block is breakable: hardness >= 0 and player can harvest it (basic check)
+
+
+        // Thin blocks to skip face matching
+        Set<Block> thinBlocks = new HashSet<>(Arrays.asList(
+                Blocks.glass_pane,
+                Blocks.iron_bars
+                // add more thin blocks here if needed
+        ));
+
+        boolean skipFaceCheck = thinBlocks.contains(block);
+
+        System.out.println("[getReachableVisibleFace] Scanning block " + block.getLocalizedName() + " at " + target + " (skip face check: " + skipFaceCheck + ")");
+
+        // Scan 6x6 points on each face
         for (EnumFacing face : EnumFacing.values()) {
-            // Center of the block face + slight inward offset
-            Vec3 facePoint = new Vec3(target).addVector(0.5, 0.5, 0.5)
-                    .addVector(face.getFrontOffsetX() * 0.45,
-                            face.getFrontOffsetY() * 0.45,
-                            face.getFrontOffsetZ() * 0.45);
+            for (int u = 0; u < 6; u++) {
+                for (int v = 0; v < 6; v++) {
+                    // fractions from 0.08 to 0.92 roughly (center of grid cell)
+                    double fu = (u + 0.5) / 6.0;
+                    double fv = (v + 0.5) / 6.0;
 
-            double dist = eyePos.distanceTo(facePoint);
-            if (dist > maxReach) continue;
+                    // Calculate coordinates of point on face, slightly inside (0.49 offset)
+                    double x = target.getX() + 0.5;
+                    double y = target.getY() + 0.5;
+                    double z = target.getZ() + 0.5;
 
-            // rayTrace with leniency (ignoreBlockWithoutBoundingBox = true)
-            MovingObjectPosition hit = world.rayTraceBlocks(eyePos, facePoint, false, true, false);
-            if (hit != null && target.equals(hit.getBlockPos()) && hit.sideHit == face) {
-                if (dist < closestDist) {
-                    bestHit = hit;
-                    closestDist = dist;
+                    // Assign offsets based on which axis the face lies on
+                    switch (face.getAxis()) {
+                        case X:
+                            x += face.getFrontOffsetX() * 0.49;
+                            y += (fu - 0.5);
+                            z += (fv - 0.5);
+                            break;
+                        case Y:
+                            y += face.getFrontOffsetY() * 0.49;
+                            x += (fu - 0.5);
+                            z += (fv - 0.5);
+                            break;
+                        case Z:
+                            z += face.getFrontOffsetZ() * 0.49;
+                            x += (fu - 0.5);
+                            y += (fv - 0.5);
+                            break;
+                    }
+
+                    Vec3 aimPoint = new Vec3(x, y, z);
+                    //System.out.println("[getReachableVisibleFace] Raytracing to point " + aimPoint + " on face " + face);
+
+                    MovingObjectPosition hit = world.rayTraceBlocks(eyePos, aimPoint);
+
+                    if (hit == null) {
+                    //    System.out.println("  ❌ Hit nothing");
+                        continue;
+                    }
+
+                    if (!hit.getBlockPos().equals(target)) {
+                    //    System.out.println("  ❌ Hit wrong block at " + hit.getBlockPos());
+                        continue;
+                    }
+
+                    if (!skipFaceCheck) {
+                        // For full blocks: Minecraft raytrace returns opposite face from aim direction
+                        if (hit.sideHit != face.getOpposite()) {
+                        //    System.out.println("  ❌ Hit wrong face: got " + hit.sideHit + ", expected " + face.getOpposite());
+                            continue;
+                        }
+                    } else {
+                        // For thin blocks, skip face check
+                    //    System.out.println("  ℹ️ Skipping face check for thin block");
+                    }
+
+                    // Passed all checks - found best aim point
+                    System.out.println("  ✅ Valid aim point found at " + aimPoint + " on face " + face);
+                    return new AimPoint(aimPoint, face);
                 }
             }
         }
 
-        return bestHit;
+        System.out.println("[getReachableVisibleFace] No valid aim point found for block " + target);
+        return null;
     }
+
+
+    public static Vec3 getPerpendicular(Vec3 vec) {
+        // Picks a perpendicular vector that's not parallel to the input
+        if (Math.abs(vec.xCoord) < 0.1 && Math.abs(vec.zCoord) < 0.1) {
+            return new Vec3(1, 0, 0); // if mostly vertical
+        } else {
+            return new Vec3(0, 1, 0); // otherwise horizontal
+        }
+    }
+
+
+
 
 
 
