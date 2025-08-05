@@ -134,11 +134,23 @@ public static boolean activeMacroDetection = false;
     int lastSlot = -1;
 
     int continuousweirdvelocity = 0;
+    int continuousweirdvelocityy = 0;
     public static boolean moving = false;
     @SubscribeEvent
     public void onClientTick(TickEvent.ClientTickEvent event) {
         if (mc.thePlayer == null || mc.theWorld == null) return;
-        if(!activeMacroDetection) return;
+        if(!activeMacroDetection) {
+
+            lastYaw = Float.NaN;
+            lastPitch = Float.NaN;
+            lastX = Double.NaN;
+            lastY = Double.NaN;
+            lastZ = Double.NaN;
+            lastSlot = -1;
+            lastBlockSnapshot.clear();
+            return;
+
+        }
         if(!initialised){
             loadWhitelistFromFile();
             initialised = true;
@@ -217,7 +229,11 @@ public static boolean activeMacroDetection = false;
                     if (!allowedEntities.contains(type)) {
                         // Check if player can see this entity
                         if (player.canEntityBeSeen(entity)) {
-                            DetectedMacroCheck.alert("Unusual visible entity nearby: " + type);
+                            if (entity.isInvisible()) {
+                                DetectedMacroCheck.alert("⚠️ Entity is invisible: " + type);
+                            }
+
+                            else DetectedMacroCheck.alert("Unusual visible entity nearby: " + type);
                         }
                     }
                 }
@@ -275,14 +291,16 @@ public static boolean activeMacroDetection = false;
             double threshold = 0.1; // tweak this small value as needed
 
             if (velocityMagnitude > threshold) {
-                continuousweirdvelocity++;
+
+
                 // player is moving
                 System.out.println(velocityMagnitude);
-                if(continuousweirdvelocity>15) {
+                if(continuousweirdvelocityy==0) {
                     DetectedMacroCheck.alert("Unnatural movement direction detected while not moving.");
-                    continuousweirdvelocity = 0;
-                }
-            } else continuousweirdvelocity = 0;
+
+                    continuousweirdvelocityy = 15;
+                } else continuousweirdvelocityy --;
+            } else continuousweirdvelocityy=0;
 
         }
     }
