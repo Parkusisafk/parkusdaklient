@@ -84,9 +84,11 @@ public class GuiTaskMenu extends GuiScreen {
         xField = new GuiTextField(10, fontRendererObj, centerX, topY + 15, 80, 18);
         yField = new GuiTextField(11, fontRendererObj, centerX, topY + 39, 80, 18);
         zField = new GuiTextField(12, fontRendererObj, centerX, topY + 63, 80, 18);
-        xField.setText(String.valueOf((int) player.posX));
-        yField.setText(String.valueOf((int) player.posY-1));
-        zField.setText(String.valueOf((int) player.posZ));
+        BlockPos bos = new BlockPos(player.posX, player.posY, player.posZ).down();
+
+        xField.setText(String.valueOf(bos.getX()));
+        yField.setText(String.valueOf(bos.getY()));
+        zField.setText(String.valueOf(bos.getZ()));
 
         btnOk = new GuiButton(5, centerX, topY + 24*3 + 15, 80, 20, "OK");
         buttonList.add(btnOk);
@@ -366,7 +368,8 @@ public class GuiTaskMenu extends GuiScreen {
             String running = "Running: " + SkyblockMod.taskManager.getCurrent().getDescription();
             if (f() != null) f().drawString(running, panelX, panelY + panelH + 10, 0xFF00FF00);
 
-            else drawString(fontRendererObj, running, panelX, panelY + panelH + 10, 0x00FF00);}
+            else drawString(fontRendererObj, running, panelX, panelY + panelH + 10, 0x00FF00);
+        }
 
         lastMouseY = mouseY;
         super.drawScreen(mouseX, mouseY, partialTicks);

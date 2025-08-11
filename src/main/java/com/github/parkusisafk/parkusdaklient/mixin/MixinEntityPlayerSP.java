@@ -4,9 +4,9 @@ import com.github.parkusisafk.parkusdaklient.SkyblockMod;
 import com.github.parkusisafk.parkusdaklient.command.CommandBreakTask;
 import com.github.parkusisafk.parkusdaklient.macro.MacroCheckDetector;
 import com.github.parkusisafk.parkusdaklient.tasks.Task;
+import com.github.parkusisafk.parkusdaklient.tasks.TaskManager;
 import com.github.parkusisafk.parkusdaklient.util.GuiOpener;
 import net.minecraft.block.Block;
-import net.minecraft.block.BlockAir;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.init.Blocks;
@@ -38,51 +38,102 @@ Minecraft mc = Minecraft.getMinecraft();
              ci.cancel(); // Don't send to server */
         }
         else if(msg.contains(".macrocheck") || msg.contains(".mc")){
-            MacroCheckDetector.activeMacroDetection = true;
-            mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §d§lEnabled Macro Check Detection!"));
-            try {
-                int mode = Integer.parseInt(msg.trim().split(" ")[1]);
-                new Thread(() -> {
-                    try {
-                        Thread.sleep(400);
-
-                        com.github.parkusisafk.parkusdaklient.command.CommandMacroCheck.run(mode);
-
-                        Thread.sleep(400);
-
-                        MacroCheckDetector.activeMacroDetection = false;
-                        mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §d§lDisabled Macro Check Detection!"));
-                    } catch (Exception f) {
-                        f.printStackTrace();
-                    }
-
-
-
-                }).start(); // Start the new thread
-
-            } catch (Exception e) {
-                String[] parts = msg.trim().split(" ");
-                if (parts.length == 1) {
-                    // Run in a background thread to prevent game freezing
+            Minecraft mc = Minecraft.getMinecraft();
+            if(mc.isSingleplayer()) {
+                MacroCheckDetector.activeMacroDetection = true;
+                mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §d§lEnabled Macro Check Detection!"));
+                try {
+                    int mode = Integer.parseInt(msg.trim().split(" ")[1]);
                     new Thread(() -> {
                         try {
-                            for (int nigga = 1; nigga != 8; nigga++) {
-                                Thread.sleep(500);
-                                com.github.parkusisafk.parkusdaklient.command.CommandMacroCheck.run(nigga);
-                                Thread.sleep(2000); // Sleep 2 seconds between checks
-                            }
-                        } catch (InterruptedException f) {
+                            Thread.sleep(400);
+
+                            com.github.parkusisafk.parkusdaklient.command.CommandMacroCheck.run(mode);
+
+                            Thread.sleep(400);
+
+                            MacroCheckDetector.activeMacroDetection = false;
+                            mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §d§lDisabled Macro Check Detection!"));
+                        } catch (Exception f) {
                             f.printStackTrace();
                         }
 
-                        MacroCheckDetector.activeMacroDetection = false;
-                        mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §d§lDisabled Macro Check Detection!"));
 
                     }).start(); // Start the new thread
+
+                } catch (Exception e) {
+                    String[] parts = msg.trim().split(" ");
+                    if (parts.length == 1) {
+                        // Run in a background thread to prevent game freezing
+                        new Thread(() -> {
+                            try {
+                                for (int nigga = 1; nigga != 8; nigga++) {
+                                    Thread.sleep(500);
+                                    com.github.parkusisafk.parkusdaklient.command.CommandMacroCheck.run(nigga);
+                                    Thread.sleep(2000); // Sleep 2 seconds between checks
+                                }
+                            } catch (InterruptedException f) {
+                                f.printStackTrace();
+                            }
+
+                            MacroCheckDetector.activeMacroDetection = false;
+                            mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §d§lDisabled Macro Check Detection!"));
+
+                        }).start(); // Start the new thread
+                    } else
+                        mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §cUsage: .macrocheck <1-7>"));
+                }
+            } else{
+                mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §cYou are in multiplayer trying to use .macrocheck? use .mcmcmcmcmc instead!"));
+
+            }
+            ci.cancel(); // prevent command from reaching server
+        } else if(msg.contains(".mcmcmcmcmc")){
+
+                MacroCheckDetector.activeMacroDetection = true;
+                mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §d§lEnabled Macro Check Detection!"));
+                try {
+                    int mode = Integer.parseInt(msg.trim().split(" ")[1]);
+                    new Thread(() -> {
+                        try {
+                            Thread.sleep(400);
+
+                            com.github.parkusisafk.parkusdaklient.command.CommandMacroCheck.run(mode);
+
+                            Thread.sleep(400);
+
+                            MacroCheckDetector.activeMacroDetection = false;
+                            mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §d§lDisabled Macro Check Detection!"));
+                        } catch (Exception f) {
+                            f.printStackTrace();
+                        }
+
+
+                    }).start(); // Start the new thread
+
+                } catch (Exception e) {
+                    String[] parts = msg.trim().split(" ");
+                    if (parts.length == 1) {
+                        // Run in a background thread to prevent game freezing
+                        new Thread(() -> {
+                            try {
+                                for (int nigga = 1; nigga != 8; nigga++) {
+                                    Thread.sleep(500);
+                                    com.github.parkusisafk.parkusdaklient.command.CommandMacroCheck.run(nigga);
+                                    Thread.sleep(2000); // Sleep 2 seconds between checks
+                                }
+                            } catch (InterruptedException f) {
+                                f.printStackTrace();
+                            }
+
+                            MacroCheckDetector.activeMacroDetection = false;
+                            mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §d§lDisabled Macro Check Detection!"));
+
+                        }).start(); // Start the new thread
+                    } else
+                        mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §cUsage: .macrocheck <1-7>"));
                 }
 
-                else mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §cUsage: .macrocheck <1-7>"));
-            }
             ci.cancel(); // prevent command from reaching server
         }
         else if(msg.contains(".allowteleport")){
@@ -90,9 +141,10 @@ Minecraft mc = Minecraft.getMinecraft();
             mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §dDisabled Teleport Macro Check"));
             ci.cancel();
         }
-        else if(msg.contains(".disallowteleport")){
-            MacroCheckDetector.INSTANCE.setTeleporting(false);
-            mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §dEnabled Teleport Macro Check"));
+        else if(msg.contains(".disallowteleport")) {
+                MacroCheckDetector.INSTANCE.setTeleporting(false);
+                mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §dEnabled Teleport Macro Check"));
+
 
             ci.cancel();
 
@@ -106,7 +158,7 @@ Minecraft mc = Minecraft.getMinecraft();
             }
 
             Block block = Block.getBlockFromName(parts[1]);
-            if (block == null || block instanceof BlockAir) {
+            if (block == null ) {
                 mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §cInvalid block: " + parts[1]));
             } else {
                 MacroCheckDetector.whitelistBlock(block);
@@ -126,7 +178,7 @@ Minecraft mc = Minecraft.getMinecraft();
             }
 
             Block block = Block.getBlockFromName(parts[1]);
-            if (block == null || block instanceof BlockAir) {
+            if (block == null) {
                 mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §cInvalid block: " + parts[1]));
             } else if (MacroCheckDetector.removeWhitelistedBlock(block)) {
                 boolean removed = true;
@@ -139,18 +191,25 @@ Minecraft mc = Minecraft.getMinecraft();
             Block lookingAt = null;
             try {
                 MovingObjectPosition mop = mc.objectMouseOver;
-                if (mop != null && mop.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK) {
-                    BlockPos pos = mop.getBlockPos();
-                    lookingAt = mc.theWorld.getBlockState(pos).getBlock();
-                    String regName = Block.blockRegistry.getNameForObject(lookingAt).toString(); // registry name
-                    String displayName = lookingAt.getLocalizedName(); // display name
+                if (mop != null) {
+                    if (mop.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK) {
+                        BlockPos pos = mop.getBlockPos();
+                        Block block = mc.theWorld.getBlockState(pos).getBlock();
+                        String regName = Block.blockRegistry.getNameForObject(block).toString();
+                        String displayName = block.getLocalizedName();
 
-                    mc.thePlayer.addChatMessage(new ChatComponentText(
-                            "§b[ParkusDaKlient] §eBlock: §a" + regName + " §7(" + displayName + ")"
-                    ));
+                        mc.thePlayer.addChatMessage(new ChatComponentText(
+                                "§b[ParkusDaKlient] §eBlock: §a" + regName + " §7(" + displayName + ")"
+                        ));
+                    } else if (mop.typeOfHit == MovingObjectPosition.MovingObjectType.MISS) {
+                        mc.thePlayer.addChatMessage(new ChatComponentText(
+                                "§b[ParkusDaKlient] §eBlock: §aminecraft:air §7(Air)"
+                        ));
+                    }
                 } else {
-                    mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §cYou're not looking at a block."));
+                    mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §cYou're not looking at anything."));
                 }
+
             } catch (Exception e) {
                 mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §cFailed to get block name."));
                 e.printStackTrace();
@@ -212,6 +271,8 @@ Minecraft mc = Minecraft.getMinecraft();
             ci.cancel();
 
         } else if (msg.startsWith(".run")){
+            ci.cancel();
+
             String[] parts = msg.trim().split(" ");
 
             if(parts.length == 1){
@@ -253,7 +314,15 @@ Minecraft mc = Minecraft.getMinecraft();
 
             }
 
-
+        } else if (msg.equalsIgnoreCase(".s") || msg.equalsIgnoreCase(".stop")){
+            SkyblockMod.moveForwardHandler.cancel();
+            SkyblockMod.blockBreakingHandler.cancel();
+            TaskManager.stopexecution = true;
+            mc.thePlayer.addChatMessage(new ChatComponentText("§eStopped actions."));
+            ci.cancel();
+        } else if (msg.equalsIgnoreCase(".clear")){
+            SkyblockMod.taskManager.clear();
+            ci.cancel();
         }
 
 

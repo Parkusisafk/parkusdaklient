@@ -1,6 +1,7 @@
 package com.github.parkusisafk.parkusdaklient.tasks;
 
 import com.github.parkusisafk.parkusdaklient.SkyblockMod;
+import com.github.parkusisafk.parkusdaklient.macro.DetectedMacroCheck;
 import com.github.parkusisafk.parkusdaklient.macro.MacroCheckDetector;
 import net.minecraft.util.BlockPos;
 
@@ -71,6 +72,8 @@ public class WalkToTask extends Task {
                     String.format("§eOH SHIT IS THIS A MACRO CHECK??? Walk timed out after %ss to %d,%d,%d",
                             timeoutTicks / 20, pos.getX(), pos.getY(), pos.getZ())
             ));
+            DetectedMacroCheck.alert("Walk timed out");
+
         }
     }
 

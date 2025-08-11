@@ -201,7 +201,7 @@ public static boolean activeMacroDetection = false;
 
                     if (previous == null && !monitorWhitelist.contains(current) && current != Blocks.air) {
                         DetectedMacroCheck.alert("New suspicious block appeared: " + current.getLocalizedName());
-                    } else if (previous != null && previous != current && !monitorWhitelist.contains(current)) {
+                    } else if (previous != null && previous != current && !monitorWhitelist.contains(previous)) {
                         DetectedMacroCheck.alert("Block changed at " + pos + ": " + previous.getLocalizedName() + " -> " + current.getLocalizedName());
                     }
 

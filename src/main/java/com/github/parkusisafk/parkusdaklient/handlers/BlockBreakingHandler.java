@@ -1,5 +1,6 @@
 package com.github.parkusisafk.parkusdaklient.handlers;
 
+import com.github.parkusisafk.parkusdaklient.macro.DetectedMacroCheck;
 import com.github.parkusisafk.parkusdaklient.util.AimHelper;
 import com.github.parkusisafk.parkusdaklient.util.AimHelper.YawPitch;
 import net.minecraft.block.Block;
@@ -291,6 +292,8 @@ public class BlockBreakingHandler {
                     mc.thePlayer.addChatMessage(new ChatComponentText(
                             "§eTurning timed out after " + (buttockelapsed / 20.0) + "s @ " +
                                     resultPos.getX() + "," + resultPos.getY() + "," + resultPos.getZ()));
+                    DetectedMacroCheck.alert("Turning timed out");
+
                     cancel();
                     releaseLeftClickIfHeld();
                     isMining = false;
@@ -339,7 +342,7 @@ public class BlockBreakingHandler {
 
         } else {
             mc.thePlayer.addChatMessage(new ChatComponentText(
-                    "Unable to calculate best hit face for target: " +
+                    "Unable to calculate best hit face for target, or target too far away: " +
                             target.getX() + "," + target.getY() + "," + target.getZ()));
             cancel();
             releaseLeftClickIfHeld();
@@ -440,6 +443,28 @@ public class BlockBreakingHandler {
         Vec3 eyePos = new Vec3(player.posX, player.posY + player.getEyeHeight(), player.posZ);
         IBlockState state = world.getBlockState(target);
         Block block = state.getBlock();
+
+        final double REACH_DISTANCE = 4.2; // adjust for your case
+
+        // Get player's eye position
+        double px = player.posX;
+        double py = player.posY + player.getEyeHeight();
+        double pz = player.posZ;
+
+        // Get target block center position
+        double tx = target.getX() + 0.5;
+        double ty = target.getY() + 0.5;
+        double tz = target.getZ() + 0.5;
+
+        // Euclidean distance
+        double dist = Math.sqrt(
+                Math.pow(tx - px, 2) +
+                        Math.pow(ty - py, 2) +
+                        Math.pow(tz - pz, 2)
+        );
+
+        // Return null if too far
+        if (dist > REACH_DISTANCE) return null;
 
         // Check if block is breakable: hardness >= 0 and player can harvest it (basic check)
 
