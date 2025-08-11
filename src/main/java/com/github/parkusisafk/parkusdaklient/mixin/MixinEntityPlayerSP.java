@@ -84,11 +84,11 @@ Minecraft mc = Minecraft.getMinecraft();
                         mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §cUsage: .macrocheck <1-7>"));
                 }
             } else{
-                mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §cYou are in multiplayer trying to use .macrocheck? use .mcmcmcmcmc instead!"));
+                mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §cYou are in multiplayer trying to use .macrocheck? use .cmcmcmcmcm instead!"));
 
             }
             ci.cancel(); // prevent command from reaching server
-        } else if(msg.contains(".mcmcmcmcmc")){
+        } else if(msg.contains(".cmcmcmcmcm")){
 
                 MacroCheckDetector.activeMacroDetection = true;
                 mc.thePlayer.addChatMessage(new ChatComponentText("§b[ParkusDaKlient] §d§lEnabled Macro Check Detection!"));
