@@ -162,7 +162,7 @@ public static boolean activeMacroDetection = false;
         if (!Float.isNaN(lastYaw)) {
             float deltaYaw = Math.abs(yaw - lastYaw);
             float deltaPitch = Math.abs(pitch - lastPitch);
-            if ((deltaYaw > 85f || deltaPitch > 85f) || (deltaPitch + deltaYaw) > 85f) {
+            if ((deltaYaw > 85f || deltaPitch > 85f) || (deltaPitch + deltaYaw) > 85f && !isTeleporting) {
                 DetectedMacroCheck.alert("Sharp turn detected");
             }
 

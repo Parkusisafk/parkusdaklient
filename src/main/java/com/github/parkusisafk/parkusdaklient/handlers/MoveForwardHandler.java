@@ -3,6 +3,8 @@ package com.github.parkusisafk.parkusdaklient.handlers;
 import com.github.parkusisafk.parkusdaklient.util.AimHelper;
 import com.github.parkusisafk.parkusdaklient.util.AimHelper.YawPitch;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiChat;
+import net.minecraft.client.gui.GuiIngameMenu;
 import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.util.BlockPos;
 import net.minecraft.util.MathHelper;
@@ -89,7 +91,9 @@ public class MoveForwardHandler {
         if (mc.thePlayer == null || mc.theWorld == null) { cancel(); return; }
 
         // Safer: do not auto-walk when GUI is open
-        if (mc.currentScreen != null) { setForward(false, false); return; }
+        if (mc.currentScreen != null
+                && !(mc.currentScreen instanceof GuiChat)        // allow chat
+                && !(mc.currentScreen instanceof GuiIngameMenu)) { setForward(false, false); return; }
 
         boolean shouldMove = false;
 

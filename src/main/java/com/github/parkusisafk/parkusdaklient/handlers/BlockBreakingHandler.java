@@ -2,11 +2,12 @@ package com.github.parkusisafk.parkusdaklient.handlers;
 
 import com.github.parkusisafk.parkusdaklient.macro.DetectedMacroCheck;
 import com.github.parkusisafk.parkusdaklient.util.AimHelper;
-import com.github.parkusisafk.parkusdaklient.util.AimHelper.YawPitch;
 import net.minecraft.block.Block;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
+import net.minecraft.client.gui.GuiChat;
+import net.minecraft.client.gui.GuiIngameMenu;
 import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.init.Blocks;
@@ -95,110 +96,8 @@ public class BlockBreakingHandler {
     private boolean startedBreaking = false;
     private int nextSwingTick = 0;
     private final Random rand = new Random();
-    private void facePosSmooth(MovingObjectPosition hit) {
-        if (hit == null) return;
-
-        BlockPos pos = hit.getBlockPos();
-        EnumFacing face = hit.sideHit;
-
-        Vec3 aimPoint = getAimPointSlightlyInsideFace(pos, face); // ✅ now using correct face
-
-        double ex = mc.thePlayer.posX;
-        double ey = mc.thePlayer.posY + mc.thePlayer.getEyeHeight();
-        double ez = mc.thePlayer.posZ;
-
-        double distSqCenter = eyeDistSq(ex, ey, ez, aimPoint);
-        boolean veryClose = distSqCenter < nearDistSq;
-
-        AimHelper.YawPitch goal = AimHelper.lookAtPoint(ex, ey, ez,
-                aimPoint.xCoord, aimPoint.yCoord, aimPoint.zCoord);
-
-        float yawErr = Math.abs(MathHelper.wrapAngleTo180_float(goal.yaw - mc.thePlayer.rotationYaw));
-        float pitchErr = Math.abs(goal.pitch - mc.thePlayer.rotationPitch);
-
-        if (veryClose && yawErr < deadzoneDeg && pitchErr < deadzoneDeg) return;
-
-        float yawSpeed = yawMin + rng.nextFloat() * yawRand;
-        float pitchSpeed = pitchMin + rng.nextFloat() * pitchRand;
-        if (veryClose) {
-            yawSpeed *= slowFactorNear;
-            pitchSpeed *= slowFactorNear;
-        }
-
-        float nextYaw = AimHelper.stepYawTowards(mc.thePlayer.rotationYaw, goal.yaw, yawSpeed);
-        float nextPitch = AimHelper.stepPitchTowards(mc.thePlayer.rotationPitch, goal.pitch, pitchSpeed);
-
-        float seamDelta = Math.abs(MathHelper.wrapAngleTo180_float(nextYaw - mc.thePlayer.rotationYaw));
-        if (seamDelta > 170f) mc.thePlayer.prevRotationYaw = mc.thePlayer.rotationYaw;
-
-        mc.thePlayer.rotationYaw = nextYaw;
-        mc.thePlayer.rotationPitch = nextPitch;
-    }
-
-    private boolean isFacingTarget(BlockPos target, Vec3 faceCenter) {
-        // Player eye position
-        double eyeX = mc.thePlayer.posX;
-        double eyeY = mc.thePlayer.posY + mc.thePlayer.getEyeHeight();
-        double eyeZ = mc.thePlayer.posZ;
-
-        // Desired yaw/pitch to face the visible face center
-        AimHelper.YawPitch goal = AimHelper.lookAtPoint(eyeX, eyeY, eyeZ, faceCenter.xCoord, faceCenter.yCoord, faceCenter.zCoord);
-
-        float yawErr   = Math.abs(MathHelper.wrapAngleTo180_float(goal.yaw - mc.thePlayer.rotationYaw));
-        float pitchErr = Math.abs(goal.pitch - mc.thePlayer.rotationPitch);
-
-        final float aimingThreshold = 5.0f; // allow some leeway
-
-        // Optional: also check raytrace intersection with bounding box (for more accuracy)
-        IBlockState state = mc.theWorld.getBlockState(target);
-        AxisAlignedBB blockBB = state.getBlock().getCollisionBoundingBox(mc.theWorld, target, state);
-
-        if (blockBB == null) {
-            // If no bounding box, fallback to angular check only
-            return yawErr < aimingThreshold && pitchErr < aimingThreshold;
-        }
-
-        AxisAlignedBB worldBB = blockBB.offset(target.getX(), target.getY(), target.getZ());
-
-        Vec3 eyePos = new Vec3(eyeX, eyeY, eyeZ);
-        Vec3 lookVec = mc.thePlayer.getLookVec();
-
-        // Extend look vector far out (e.g., 5 blocks)
-        Vec3 lookEnd = eyePos.addVector(lookVec.xCoord * 5, lookVec.yCoord * 5, lookVec.zCoord * 5);
-
-        MovingObjectPosition mop = mc.theWorld.rayTraceBlocks(eyePos, lookEnd);
-
-        if (mop != null && mop.getBlockPos().equals(target)) {
-            // Ray hits the target block - facing it
-            return true;
-        }
-
-        // Fallback to angular check if raytrace fails
-        return yawErr < aimingThreshold && pitchErr < aimingThreshold;
-    }
-    public static Vec3 getAimPointSlightlyInsideFace(BlockPos pos, EnumFacing face) {
-        // Center of block + face offset (just inside face)
-        return new Vec3(pos).addVector(0.5, 0.5, 0.5)
-                .addVector(face.getFrontOffsetX() * 0.49,
-                        face.getFrontOffsetY() * 0.49,
-                        face.getFrontOffsetZ() * 0.49);
-    }
 
 
-
-    private boolean simpleAimCheck(BlockPos pos) {
-        Vec3 center = new Vec3(pos).addVector(0.5, 0.5, 0.5);
-        double eyeX = mc.thePlayer.posX;
-        double eyeY = mc.thePlayer.posY + mc.thePlayer.getEyeHeight();
-        double eyeZ = mc.thePlayer.posZ;
-        AimHelper.YawPitch goal = AimHelper.lookAtPoint(eyeX, eyeY, eyeZ, center.xCoord, center.yCoord, center.zCoord);
-
-        float yawErr = Math.abs(MathHelper.wrapAngleTo180_float(goal.yaw - mc.thePlayer.rotationYaw));
-        float pitchErr = Math.abs(goal.pitch - mc.thePlayer.rotationPitch);
-
-        final float aimingThreshold = 12.0f; // looser threshold, 12 degrees
-        return yawErr < aimingThreshold && pitchErr < aimingThreshold;
-    }
 
 
     private void holdLeftClick() {
@@ -258,6 +157,7 @@ public class BlockBreakingHandler {
     public static boolean nextMiningTask = false;  // Optional: your logic to know next mining block
     int cooldownbetweenmining = 0;
     int buttockelapsed = 0;
+    private BlockPos lastPos = null;
 
     @SubscribeEvent
     public void onClientTick(TickEvent.ClientTickEvent event) {
@@ -269,7 +169,9 @@ public class BlockBreakingHandler {
             return;
         }
 
-        if (mc.currentScreen != null) return;
+        if (mc.currentScreen != null
+                && !(mc.currentScreen instanceof GuiChat)        // allow chat
+                && !(mc.currentScreen instanceof GuiIngameMenu)) return;
 
         if(cooldownbetweenmining > 0){ cooldownbetweenmining--; return;}
 
@@ -312,6 +214,11 @@ public class BlockBreakingHandler {
                 isMining = false;
             }
 
+            if (lastPos == null || !resultPos.equals(lastPos)) {
+                mc.playerController.resetBlockRemoving();
+                lastPos = resultPos;
+            }
+
 
             // We're facing the block
             if (!isMining) {
@@ -320,7 +227,7 @@ public class BlockBreakingHandler {
             }
 
             mc.playerController.onPlayerDamageBlock(resultPos, result.sideHit);
-            if ((ticksElapsed & 3) == 0) mc.thePlayer.swingItem();
+            mc.thePlayer.swingItem();
 
             IBlockState current = mc.theWorld.getBlockState(resultPos);
             if (current.getBlock() == Blocks.air || !current.equals(originalState)) {
@@ -350,81 +257,6 @@ public class BlockBreakingHandler {
         }
     }
 
-
-
-    /** Stable, smooth, randomized turn; avoids 360° snaps and flip-flop near target. */
-    private void facePosSmooth(BlockPos p) {
-        Vec3 center = AimHelper.blockCenter(p);
-        Vec3 face   = AimHelper.nearestFaceCenterToPlayer(p);
-
-        double ex = mc.thePlayer.posX;
-        double ey = mc.thePlayer.posY + mc.thePlayer.getEyeHeight();
-        double ez = mc.thePlayer.posZ;
-
-        double distSqCenter = eyeDistSq(ex, ey, ez, center);
-        boolean veryClose = distSqCenter < nearDistSq;
-        Vec3 aim = veryClose ? face : center;
-
-        YawPitch goal = AimHelper.lookAtPoint(ex, ey, ez, aim.xCoord, aim.yCoord, aim.zCoord);
-
-        float yawErr   = Math.abs(MathHelper.wrapAngleTo180_float(goal.yaw - mc.thePlayer.rotationYaw));
-        float pitchErr = Math.abs(goal.pitch - mc.thePlayer.rotationPitch);
-
-        if (veryClose && yawErr < deadzoneDeg && pitchErr < deadzoneDeg) return;
-
-        float yawSpeed   = yawMin   + rng.nextFloat() * yawRand;
-        float pitchSpeed = pitchMin + rng.nextFloat() * pitchRand;
-        if (veryClose) { yawSpeed *= slowFactorNear; pitchSpeed *= slowFactorNear; }
-
-        float nextYaw   = AimHelper.stepYawTowards(mc.thePlayer.rotationYaw,   goal.yaw,   yawSpeed);
-        float nextPitch = AimHelper.stepPitchTowards(mc.thePlayer.rotationPitch, goal.pitch, pitchSpeed);
-
-        float seamDelta = Math.abs(MathHelper.wrapAngleTo180_float(nextYaw - mc.thePlayer.rotationYaw));
-        if (seamDelta > 170f) mc.thePlayer.prevRotationYaw = mc.thePlayer.rotationYaw;
-
-        mc.thePlayer.rotationYaw   = nextYaw;
-        mc.thePlayer.rotationPitch = nextPitch;
-    }
-
-    /** Return hit face if target is within reach and line of sight; otherwise null. */
-    private EnumFacing getReachableFace(BlockPos pos) {
-        if (mc.thePlayer == null || mc.playerController == null) return null;
-
-        float reach = getReachDistance();
-        Vec3 eye = new Vec3(mc.thePlayer.posX, mc.thePlayer.posY + mc.thePlayer.getEyeHeight(), mc.thePlayer.posZ);
-
-        // Trace toward the aim point we're actually rotating to (use face center when close)
-        Vec3 center = AimHelper.blockCenter(pos);
-        double distSqCenter = eye.squareDistanceTo(center);
-        boolean veryClose = distSqCenter < nearDistSq;
-        Vec3 aim = veryClose ? AimHelper.nearestFaceCenterToPlayer(pos) : center;
-
-        if (eye.squareDistanceTo(aim) > (double)(reach * reach)) return null;
-
-        // Ray trace (stopOnLiquid=false, ignoreNoBB=true, returnLastUncollidable=false)
-        MovingObjectPosition mop = mc.theWorld.rayTraceBlocks(eye, aim, false, true, false);
-        if (mop == null) {
-            // Nothing in between; choose a face based on player direction
-            return mc.thePlayer.getHorizontalFacing().getOpposite();
-        }
-        if (mop.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK && pos.equals(mop.getBlockPos())) {
-            return mop.sideHit;
-        }
-        return null; // obstructed
-    }
-
-    private float getReachDistance() {
-        try {
-            float r = mc.playerController.getBlockReachDistance();
-            if (r > 0) return r;
-        } catch (Throwable ignored) {}
-        return mc.playerController != null && mc.playerController.isInCreativeMode() ? 5.0f : 4.5f;
-    }
-
-    private static double eyeDistSq(double ex, double ey, double ez, Vec3 t) {
-        double dx = t.xCoord - ex, dy = t.yCoord - ey, dz = t.zCoord - ez;
-        return dx*dx + dy*dy + dz*dz;
-    }
 
     public static class AimPoint {
         public final Vec3 vec;
@@ -550,14 +382,6 @@ public class BlockBreakingHandler {
     }
 
 
-    public static Vec3 getPerpendicular(Vec3 vec) {
-        // Picks a perpendicular vector that's not parallel to the input
-        if (Math.abs(vec.xCoord) < 0.1 && Math.abs(vec.zCoord) < 0.1) {
-            return new Vec3(1, 0, 0); // if mostly vertical
-        } else {
-            return new Vec3(0, 1, 0); // otherwise horizontal
-        }
-    }
 
 
 
