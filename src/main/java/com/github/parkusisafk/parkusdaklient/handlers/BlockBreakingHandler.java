@@ -19,6 +19,7 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import org.lwjgl.opengl.GL11;
 
+import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Random;
@@ -30,7 +31,19 @@ import java.util.Set;
  * - Reachability + line-of-sight check; uses the actual hit face for onPlayerDamageBlock.
  * - Timeout and "unreachable" timeout with chat feedback.
  */
+
 public class BlockBreakingHandler {
+
+    private float getCurBlockDamageMP() {
+        try {
+            Field f = mc.playerController.getClass().getDeclaredField("curBlockDamageMP");
+            f.setAccessible(true); // allow access even though private
+            return f.getFloat(mc.playerController);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return 0f;
+        }
+    }
     public static final BlockBreakingHandler INSTANCE = new BlockBreakingHandler();
     private final Minecraft mc = Minecraft.getMinecraft();
     private final Random rng = new Random();
@@ -151,6 +164,9 @@ public class BlockBreakingHandler {
         return false;
     }
 
+    private float lastProgress = 0f;
+    private int stuckTicks = 0;  // counts how long the block is "stuck"
+    private final int STUCK_THRESHOLD_TICKS = 60; // 1 second at 20 TPS
 
 
     private boolean isMining = false;  // Track if left click is currently held
@@ -158,6 +174,8 @@ public class BlockBreakingHandler {
     int cooldownbetweenmining = 0;
     int buttockelapsed = 0;
     private BlockPos lastPos = null;
+
+
 
     @SubscribeEvent
     public void onClientTick(TickEvent.ClientTickEvent event) {
@@ -228,6 +246,21 @@ public class BlockBreakingHandler {
 
             mc.playerController.onPlayerDamageBlock(resultPos, result.sideHit);
             mc.thePlayer.swingItem();
+
+            // === STUCK DETECTION ===
+            float progress = getCurBlockDamageMP();
+            if (progress <= 0.05f) { // stuck at start threshold
+                stuckTicks++;
+                if (stuckTicks >= STUCK_THRESHOLD_TICKS) {
+                    mc.thePlayer.addChatMessage(
+                            new ChatComponentText("§cBlock breaking appears stuck! Trying again"));
+                    mc.playerController.resetBlockRemoving(); // neded try again
+                    stuckTicks = 0;
+                }
+            } else {
+                stuckTicks = 0; // progress is moving
+            }
+            // === END STUCK DETECTION ===
 
             IBlockState current = mc.theWorld.getBlockState(resultPos);
             if (current.getBlock() == Blocks.air || !current.equals(originalState)) {
