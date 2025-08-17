@@ -11,6 +11,7 @@ import net.minecraft.client.gui.GuiIngameMenu;
 import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.init.Blocks;
+import net.minecraft.network.play.client.C07PacketPlayerDigging;
 import net.minecraft.util.*;
 import net.minecraft.world.World;
 import net.minecraftforge.client.event.RenderWorldLastEvent;
@@ -20,10 +21,7 @@ import net.minecraftforge.fml.common.gameevent.TickEvent;
 import org.lwjgl.opengl.GL11;
 
 import java.lang.reflect.Field;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Random;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Stable auto-break:
@@ -53,8 +51,8 @@ public class BlockBreakingHandler {
     private boolean active = false;
 
     // rotation speed ranges (deg per tick)
-    private float yawMin = 8.0f, yawRand = 8.0f;     // 2.5..6.0
-    private float pitchMin = 8.0f, pitchRand = 8.0f; // 2..5
+    private float yawMin = 12.0f, yawRand = 8.0f;     // 2.5..6.0
+    private float pitchMin = 12.0f, pitchRand = 8.0f; // 2..5
     private float deadzoneDeg = 0.5f;
     private double nearDistSq = 4.0; // very close if within 2 blocks
     private float slowFactorNear = 0.5f;
@@ -174,8 +172,13 @@ public class BlockBreakingHandler {
     int cooldownbetweenmining = 0;
     int buttockelapsed = 0;
     private BlockPos lastPos = null;
+    private MovingObjectPosition lockedAim = null;
 
 
+
+    private BlockPos lockedPos = null;
+    private EnumFacing lockedFace = null;
+    private Vec3 lockedHitVec = null;
 
     @SubscribeEvent
     public void onClientTick(TickEvent.ClientTickEvent event) {
@@ -184,236 +187,355 @@ public class BlockBreakingHandler {
         if (mc.theWorld == null || mc.thePlayer == null || target == null) {
             cancel();
             releaseLeftClickIfHeld();
+            isMining = false;
             return;
         }
 
+        // Ignore GUI except chat/game menu
         if (mc.currentScreen != null
-                && !(mc.currentScreen instanceof GuiChat)        // allow chat
+                && !(mc.currentScreen instanceof GuiChat)
                 && !(mc.currentScreen instanceof GuiIngameMenu)) return;
 
-        if(cooldownbetweenmining > 0){ cooldownbetweenmining--; return;}
+        // Mining cooldown
+        if (cooldownbetweenmining > 0) {
+            cooldownbetweenmining--;
+            return;
+        }
 
-        AimPoint result = getReachableVisibleFace(mc.thePlayer, mc.theWorld, target);
-
-        if (result != null) {
-            BlockPos resultPos = result.getBlockPos();
-
-            // Debug: draw line from eye to aim point
-            this.debugLineStart = mc.thePlayer.getPositionEyes(1.0f);
-            this.debugLineEnd = result.vec;
-
-            if (!faceUntilFacingTarget(result.vec)) {
-                if (isMining && !nextMiningTask) {
-                    releaseLeftClickIfHeld();
-                    isMining = false;
-                }
-                buttockelapsed++;
-                if(buttockelapsed>60){
-                    mc.thePlayer.addChatMessage(new ChatComponentText(
-                            "§eTurning timed out after " + (buttockelapsed / 20.0) + "s @ " +
-                                    resultPos.getX() + "," + resultPos.getY() + "," + resultPos.getZ()));
-                    DetectedMacroCheck.alert("Turning timed out");
-
-                    cancel();
-                    releaseLeftClickIfHeld();
-                    isMining = false;
-                    buttockelapsed = 0;
-                }
-                return;
-            }
-            buttockelapsed = 0;
-            ticksElapsed++;
-            if (ticksElapsed >= 20 * 8) {
+        // Lock onto block if new target or no lock
+        if (lockedPos == null || !target.equals(lockedPos)) {
+            AimPoint result = getReachableVisibleFace(mc.thePlayer, mc.theWorld, target);
+            if (result == null) {
                 mc.thePlayer.addChatMessage(new ChatComponentText(
-                        "§eBreaking timed out after " + (ticksElapsed / 20.0) + "s @ " +
-                                resultPos.getX() + "," + resultPos.getY() + "," + resultPos.getZ()));
+                        "Unable to aim at target: " + target));
                 cancel();
                 releaseLeftClickIfHeld();
                 isMining = false;
-            }
-
-            if (lastPos == null || !resultPos.equals(lastPos)) {
-                mc.playerController.resetBlockRemoving();
-                lastPos = resultPos;
-            }
-
-
-            // We're facing the block
-            if (!isMining) {
-                holdLeftClick();
-                isMining = true;
-            }
-
-            mc.playerController.onPlayerDamageBlock(resultPos, result.sideHit);
-            mc.thePlayer.swingItem();
-
-            // === STUCK DETECTION ===
-            float progress = getCurBlockDamageMP();
-            if (progress <= 0.05f) { // stuck at start threshold
-                stuckTicks++;
-                if (stuckTicks >= STUCK_THRESHOLD_TICKS) {
-                    mc.thePlayer.addChatMessage(
-                            new ChatComponentText("§cBlock breaking appears stuck! Trying again"));
-                    mc.playerController.resetBlockRemoving(); // neded try again
-                    stuckTicks = 0;
-                }
-            } else {
-                stuckTicks = 0; // progress is moving
-            }
-            // === END STUCK DETECTION ===
-
-            IBlockState current = mc.theWorld.getBlockState(resultPos);
-            if (current.getBlock() == Blocks.air || !current.equals(originalState)) {
-                mc.thePlayer.addChatMessage(new ChatComponentText(
-                        "Block broken/changed at " + resultPos.getX() + "," + resultPos.getY() + "," + resultPos.getZ()));
-                cooldownbetweenmining = 3;
-                cancel();
-
-                if (!nextMiningTask) {
-                    releaseLeftClickIfHeld();
-                    isMining = false;
-                } else {
-                    isMining = false;
-                }
                 return;
             }
+            lockedPos = result.getBlockPos();
+            lockedFace = result.face;
+            lockedHitVec = result.hitVec;
+            isMining = false;
+        }
 
+        // Debug line
+        this.debugLineStart = mc.thePlayer.getPositionEyes(1.0f);
+        this.debugLineEnd = lockedHitVec;
 
+        // Rotate to face locked target
+        if (!faceUntilFacingTarget(lockedHitVec)) {
+            releaseLeftClickIfHeld();
+            isMining = false;
+            buttockelapsed++;
+            if (buttockelapsed > 60) {
+                mc.thePlayer.addChatMessage(new ChatComponentText(
+                        "§eTurning timed out after " + (buttockelapsed / 20.0) + "s @ " + lockedPos));
+                DetectedMacroCheck.alert("Turning timed out");
+                cancel();
+                buttockelapsed = 0;
+            }
+            return;
+        }
+        buttockelapsed = 0;
 
-        } else {
+        ticksElapsed++;
+
+        // Timeout check
+        if (ticksElapsed >= 20 * 8) {
             mc.thePlayer.addChatMessage(new ChatComponentText(
-                    "Unable to calculate best hit face for target, or target too far away: " +
-                            target.getX() + "," + target.getY() + "," + target.getZ()));
+                    "§eBreaking timed out after " + (ticksElapsed / 20.0) + "s @ " + lockedPos));
             cancel();
             releaseLeftClickIfHeld();
             isMining = false;
+            return;
+        }
+
+        // Start breaking if not already
+        if (!isMining) {
+            mc.thePlayer.sendQueue.addToSendQueue(
+                    new C07PacketPlayerDigging(
+                            C07PacketPlayerDigging.Action.START_DESTROY_BLOCK,
+                            lockedPos,
+                            lockedFace
+                    )
+            );
+            holdLeftClick(); // cosmetic
+            isMining = true;
+        }
+
+        // Randomized mining tick (1 or 2 tick interval)
+        //int randDelay = 1 + mc.theWorld.rand.nextInt(2); // 1 or 2
+        //if (ticksElapsed % randDelay == 0) {
+            mc.playerController.onPlayerDamageBlock(lockedPos, lockedFace);
+            mc.thePlayer.swingItem();
+//}
+        // Occasionally release click (cosmetic only)
+        if (mc.theWorld.rand.nextInt(40) == 0) {
+            releaseLeftClickIfHeld();
+            isMining = false;
+        }
+
+        // Detect stuck progress
+        float progress = getCurBlockDamageMP();
+        if (progress <= 0.05f) {
+            stuckTicks++;
+            if (stuckTicks >= 40) {
+                mc.thePlayer.addChatMessage(new ChatComponentText(
+                        "§cBlock breaking appears stuck, retrying"));
+                stuckTicks = 0;
+                releaseLeftClickIfHeld();
+                isMining = false;
+            }
+        } else {
+            stuckTicks = 0;
+        }
+
+        // Detect block broken
+        IBlockState current = mc.theWorld.getBlockState(lockedPos);
+        if (current.getBlock() == Blocks.air || !current.equals(originalState)) {
+            mc.thePlayer.sendQueue.addToSendQueue(
+                    new C07PacketPlayerDigging(
+                            C07PacketPlayerDigging.Action.STOP_DESTROY_BLOCK,
+                            lockedPos,
+                            lockedFace
+                    )
+            );
+            releaseLeftClickIfHeld();
+            isMining = false;
+            cooldownbetweenmining = 1;
+            cancel();
+            lastPos = null;
+            target = null;
+            lockedPos = null;
+            lockedFace = null;
+            lockedHitVec = null;
+            stuckTicks = 0;
+            mc.thePlayer.addChatMessage(new ChatComponentText(
+                    "Block broken at " + lockedPos));
         }
     }
 
 
-    public static class AimPoint {
-        public final Vec3 vec;
-        public final EnumFacing sideHit;
 
-        public AimPoint(Vec3 vec, EnumFacing sideHit) {
-            this.vec = vec;
-            this.sideHit = sideHit;
+
+
+    // small container class (keep or adapt to your project)
+    public static class AimPoint {
+        private final BlockPos blockPos;
+        private final EnumFacing face;
+        private final Vec3 hitVec;
+
+        public AimPoint(BlockPos blockPos, EnumFacing face, Vec3 hitVec) {
+            this.blockPos = blockPos;
+            this.face = face;
+            this.hitVec = hitVec;
         }
 
         public BlockPos getBlockPos() {
-            return new BlockPos(vec);
+            return blockPos;
+        }
+
+        public EnumFacing getFace() {
+            return face;
+        }
+
+        public Vec3 getHitVec() {
+            return hitVec;
         }
     }
-    public static AimPoint getReachableVisibleFace(EntityPlayer player, World world, BlockPos target) {
-        Vec3 eyePos = new Vec3(player.posX, player.posY + player.getEyeHeight(), player.posZ);
-        IBlockState state = world.getBlockState(target);
+
+    /**
+     * Robust 1.8.9-compatible raytrace to find a reachable visible face/point on a block.
+     * Returns an AimPoint(hitVec, face) or null if none found within reach.
+     */
+    public static AimPoint getReachableVisibleFace(EntityPlayer player, World world, BlockPos pos) {
+        final boolean DEBUG = false;
+        final double SERVER_SAFE_REACH = 4;   // client-side conservative reach for custom servers
+        final double MAX_REACH_CAP = 4.25;
+        final double EPS = 0.001;               // nudge past face; increase to 0.01 if too many inside-block misses
+        final int GRID = 6;                     // sample resolution per face
+
+        if (player == null || world == null || pos == null) return null;
+
+        // eye position
+        Vec3 eye = new Vec3(player.posX, player.posY + player.getEyeHeight(), player.posZ);
+
+        // choose reach: try vanilla playerController; fallback to conservative value, clamp to MAX_REACH_CAP
+        double reach;
+        try {
+            // PlayerControllerMP / PlayerControllerSP in 1.8.9 often expose getBlockReachDistance()
+            float r = Minecraft.getMinecraft().playerController.getBlockReachDistance();
+            if (r > 1.0F && r < MAX_REACH_CAP) reach = r;
+            else reach = SERVER_SAFE_REACH;
+        } catch (Throwable t) {
+            reach = SERVER_SAFE_REACH;
+        }
+        reach = Math.min(reach, MAX_REACH_CAP);
+
+        // block AABB (prefer selected box, fallback to collision box or full cube)
+        IBlockState state = world.getBlockState(pos);
         Block block = state.getBlock();
 
-        final double REACH_DISTANCE = 4.2; // adjust for your case
+        AxisAlignedBB bb = null;
+        try {
+            bb = block.getSelectedBoundingBox(world, pos);
+        } catch (Throwable ignored) {}
+        if (bb == null) {
+            try {
+                AxisAlignedBB coll = block.getCollisionBoundingBox(world, pos, state);
+                if (coll != null) bb = coll;
+            } catch (Throwable ignored) {}
+        }
+        if (bb == null) bb = new AxisAlignedBB(pos.getX(), pos.getY(), pos.getZ(), pos.getX()+1, pos.getY()+1, pos.getZ()+1);
 
-        // Get player's eye position
-        double px = player.posX;
-        double py = player.posY + player.getEyeHeight();
-        double pz = player.posZ;
+        if (DEBUG) System.out.println("[getReachableVisibleFace] AABB=" + bb);
 
-        // Get target block center position
-        double tx = target.getX() + 0.5;
-        double ty = target.getY() + 0.5;
-        double tz = target.getZ() + 0.5;
+        // quick reject by distance from eye to nearest point in AABB
+        double cx = Math.max(bb.minX, Math.min(eye.xCoord, bb.maxX));
+        double cy = Math.max(bb.minY, Math.min(eye.yCoord, bb.maxY));
+        double cz = Math.max(bb.minZ, Math.min(eye.zCoord, bb.maxZ));
+        double sqDistToBox = eye.squareDistanceTo(new Vec3(cx, cy, cz));
+        if (sqDistToBox > reach * reach) {
+            if (DEBUG) System.out.println("  → rejected by reach (to AABB) dist=" + Math.sqrt(sqDistToBox));
+            return null;
+        }
 
-        // Euclidean distance
-        double dist = Math.sqrt(
-                Math.pow(tx - px, 2) +
-                        Math.pow(ty - py, 2) +
-                        Math.pow(tz - pz, 2)
-        );
+        // face ordering: primary face is the one pointing TO the eye
+        Vec3 center = new Vec3((bb.minX + bb.maxX) * 0.5, (bb.minY + bb.maxY) * 0.5, (bb.minZ + bb.maxZ) * 0.5);
+        Vec3 toEye = eye.subtract(center);
+        EnumFacing primary = EnumFacing.getFacingFromVector((float) toEye.xCoord, (float) toEye.yCoord, (float) toEye.zCoord);
 
-        // Return null if too far
-        if (dist > REACH_DISTANCE) return null;
+        List<EnumFacing> faces = new ArrayList<EnumFacing>(Arrays.asList(EnumFacing.values()));
+        faces.sort(new Comparator<EnumFacing>() {
+            @Override public int compare(EnumFacing a, EnumFacing b) {
+                if (a == primary) return -1;
+                if (b == primary) return 1;
+                if (a == primary.getOpposite()) return 1;
+                if (b == primary.getOpposite()) return -1;
+                return 0;
+            }
+        });
 
-        // Check if block is breakable: hardness >= 0 and player can harvest it (basic check)
+        // detect thin AABB to relax face checks
+        double sizeX = bb.maxX - bb.minX;
+        double sizeY = bb.maxY - bb.minY;
+        double sizeZ = bb.maxZ - bb.minZ;
+        final double THIN_THRESHOLD = 0.2;
+        boolean isThin = sizeX < THIN_THRESHOLD || sizeY < THIN_THRESHOLD || sizeZ < THIN_THRESHOLD;
 
+        // iterate faces and sample
+        for (EnumFacing face : faces) {
+            for (int u = 0; u < GRID; u++) {
+                for (int v = 0; v < GRID; v++) {
+                    double fu = (u + 0.5) / (double) GRID;
+                    double fv = (v + 0.5) / (double) GRID;
 
-        // Thin blocks to skip face matching
-        Set<Block> thinBlocks = new HashSet<>(Arrays.asList(
-                Blocks.glass_pane,
-                Blocks.iron_bars
-                // add more thin blocks here if needed
-        ));
-
-        boolean skipFaceCheck = thinBlocks.contains(block);
-
-        System.out.println("[getReachableVisibleFace] Scanning block " + block.getLocalizedName() + " at " + target + " (skip face check: " + skipFaceCheck + ")");
-
-        // Scan 6x6 points on each face
-        for (EnumFacing face : EnumFacing.values()) {
-            for (int u = 0; u < 6; u++) {
-                for (int v = 0; v < 6; v++) {
-                    // fractions from 0.08 to 0.92 roughly (center of grid cell)
-                    double fu = (u + 0.5) / 6.0;
-                    double fv = (v + 0.5) / 6.0;
-
-                    // Calculate coordinates of point on face, slightly inside (0.49 offset)
-                    double x = target.getX() + 0.5;
-                    double y = target.getY() + 0.5;
-                    double z = target.getZ() + 0.5;
-
-                    // Assign offsets based on which axis the face lies on
+                    double fx=0, fy=0, fz=0;
                     switch (face.getAxis()) {
                         case X:
-                            x += face.getFrontOffsetX() * 0.49;
-                            y += (fu - 0.5);
-                            z += (fv - 0.5);
+                            fx = (face == EnumFacing.EAST) ? bb.maxX : bb.minX;
+                            fy = bb.minY + fu * (bb.maxY - bb.minY);
+                            fz = bb.minZ + fv * (bb.maxZ - bb.minZ);
                             break;
                         case Y:
-                            y += face.getFrontOffsetY() * 0.49;
-                            x += (fu - 0.5);
-                            z += (fv - 0.5);
+                            fy = (face == EnumFacing.UP) ? bb.maxY : bb.minY;
+                            fx = bb.minX + fu * (bb.maxX - bb.minX);
+                            fz = bb.minZ + fv * (bb.maxZ - bb.minZ);
                             break;
-                        case Z:
-                            z += face.getFrontOffsetZ() * 0.49;
-                            x += (fu - 0.5);
-                            y += (fv - 0.5);
+                        default: // Z
+                            fz = (face == EnumFacing.SOUTH) ? bb.maxZ : bb.minZ;
+                            fx = bb.minX + fu * (bb.maxX - bb.minX);
+                            fy = bb.minY + fv * (bb.maxY - bb.minY);
                             break;
                     }
 
-                    Vec3 aimPoint = new Vec3(x, y, z);
-                    //System.out.println("[getReachableVisibleFace] Raytracing to point " + aimPoint + " on face " + face);
+                    Vec3 facePoint = new Vec3(fx, fy, fz);
 
-                    MovingObjectPosition hit = world.rayTraceBlocks(eyePos, aimPoint);
+                    // direction from eye to facePoint, normalized
+                    Vec3 dir = facePoint.subtract(eye);
+                    double dirLen = dir.lengthVector();
+                    if (dirLen < 1e-6) {
+                        // eye almost exactly at point - use face normal small offset
+                        dir = new Vec3(face.getDirectionVec().getX() * 0.01,
+                                face.getDirectionVec().getY() * 0.01,
+                                face.getDirectionVec().getZ() * 0.01);
+                        dirLen = dir.lengthVector();
+                    }
+                    Vec3 dirNorm = new Vec3(dir.xCoord / dirLen, dir.yCoord / dirLen, dir.zCoord / dirLen);
 
-                    if (hit == null) {
-                    //    System.out.println("  ❌ Hit nothing");
+                    // endpoint slightly past the face so the ray crosses INTO the block (avoids start/end-inside problems)
+                    double endpointDistance = dirLen + EPS;
+                    Vec3 end = eye.addVector(dirNorm.xCoord * endpointDistance,
+                            dirNorm.yCoord * endpointDistance,
+                            dirNorm.zCoord * endpointDistance);
+
+                    // try raytrace (1.8.9 overloads available)
+                    MovingObjectPosition mop = null;
+                    try {
+                        // try the more detailed signature: (start, end, stopOnLiquid, ignoreBlockWithoutBoundingBox, returnLastUncollidableBlock)
+                        mop = world.rayTraceBlocks(eye, end, false, true, false);
+                    } catch (Throwable t) {
+                        try {
+                            mop = world.rayTraceBlocks(eye, end);
+                        } catch (Throwable ignored) {}
+                    }
+
+                    if (mop == null) {
+                        if (DEBUG) System.out.println("  ❌ ray missed (face " + face + ")");
                         continue;
                     }
 
-                    if (!hit.getBlockPos().equals(target)) {
-                    //    System.out.println("  ❌ Hit wrong block at " + hit.getBlockPos());
+                    // ensure block position matched
+                    BlockPos hitPos;
+                    try {
+                        hitPos = mop.getBlockPos();
+                    } catch (Throwable t) {
+                        // some builds expose the field directly
+                        hitPos = (mop.getBlockPos() != null) ? mop.getBlockPos() : pos;
+                    }
+                    if (!pos.equals(hitPos)) {
+                        if (DEBUG) System.out.println("  ❌ hit wrong block " + hitPos + " expected " + pos);
                         continue;
                     }
 
-                    if (!skipFaceCheck) {
-                        // For full blocks: Minecraft raytrace returns opposite face from aim direction
-                        if (hit.sideHit != face.getOpposite()) {
-                        //    System.out.println("  ❌ Hit wrong face: got " + hit.sideHit + ", expected " + face.getOpposite());
-                            continue;
-                        }
-                    } else {
-                        // For thin blocks, skip face check
-                    //    System.out.println("  ℹ️ Skipping face check for thin block");
+                    // face check: allow a bit of slop for thin or very close hits
+                    boolean faceMatches = (mop.sideHit == face);
+                    double sqDistHit = eye.squareDistanceTo(mop.hitVec);
+                    boolean veryClose = sqDistHit <= 0.6 * 0.6;
+
+                    if (!faceMatches && !isThin && !veryClose) {
+                        if (DEBUG) System.out.println("  ❌ face mismatch (got " + mop.sideHit + " expected " + face + ")");
+                        continue;
                     }
 
-                    // Passed all checks - found best aim point
-                    System.out.println("  ✅ Valid aim point found at " + aimPoint + " on face " + face);
-                    return new AimPoint(aimPoint, face);
+                    // enforce reach using the actual hit vector
+                    if (sqDistHit > reach * reach) {
+                        if (DEBUG) System.out.println("  ❌ beyond reach dist=" + Math.sqrt(sqDistHit) + " reach=" + reach);
+                        continue;
+                    }
+
+                    if (DEBUG) System.out.println("  ✅ valid hit at " + mop.hitVec + " face " + mop.sideHit);
+                    return new AimPoint(mop.getBlockPos(), mop.sideHit, mop.hitVec);
                 }
             }
         }
 
-        System.out.println("[getReachableVisibleFace] No valid aim point found for block " + target);
+        if (DEBUG) System.out.println("  → no aim point found for " + pos);
         return null;
     }
 
+
+
+        private static EnumFacing[] orderedFaces(EnumFacing primary) {
+        EnumFacing[] all = EnumFacing.values();
+        Arrays.sort(all, (a, b) -> {
+            int ra = (a == primary) ? 0 : (a == primary.getOpposite() ? 1 : 2);
+            int rb = (b == primary) ? 0 : (b == primary.getOpposite() ? 1 : 2);
+            return Integer.compare(ra, rb);
+        });
+        return all;
+    }
 
 
 

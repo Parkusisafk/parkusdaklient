@@ -5,6 +5,7 @@ import com.github.parkusisafk.parkusdaklient.command.CommandBreakTask;
 import com.github.parkusisafk.parkusdaklient.macro.MacroCheckDetector;
 import com.github.parkusisafk.parkusdaklient.tasks.Task;
 import com.github.parkusisafk.parkusdaklient.tasks.TaskManager;
+import com.github.parkusisafk.parkusdaklient.tasks.TeleportTask;
 import com.github.parkusisafk.parkusdaklient.util.GuiOpener;
 import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
@@ -322,6 +323,42 @@ Minecraft mc = Minecraft.getMinecraft();
             ci.cancel();
         } else if (msg.equalsIgnoreCase(".clear")){
             SkyblockMod.taskManager.clear();
+            ci.cancel();
+        } else if (msg.equalsIgnoreCase(".tp")) {
+            Minecraft mc = Minecraft.getMinecraft();
+            if (mc.thePlayer != null && mc.theWorld != null) {
+                // Get the block under the player's feet
+                BlockPos pos = new BlockPos(
+                        Math.floor(mc.thePlayer.posX),
+                        Math.floor(mc.thePlayer.posY - 1),
+                        Math.floor(mc.thePlayer.posZ)
+                );
+
+                // Queue the teleport task
+                Task task = new TeleportTask(pos);
+                SkyblockMod.taskManager.add(task); // assuming you have a task manager
+
+                // Get coordinates for message
+                int tx = pos.getX();
+                int ty = pos.getY();
+                int tz = pos.getZ();
+
+                // Print confirmation
+                mc.thePlayer.addChatMessage(new ChatComponentText(
+                        "Queued TELEPORT on " +
+                                mc.theWorld.getBlockState(pos).getBlock().getLocalizedName() +
+                                " @ " + tx + "," + ty + "," + tz
+                ));
+            }
+
+            // Also run your breaktask as before
+            Set<Block> targetBlocks = new HashSet<>();
+            targetBlocks.add(Block.getBlockFromName("stained_glass"));
+            targetBlocks.add(Block.getBlockFromName("stained_glass_pane"));
+            targetBlocks.add(Block.getBlockFromName("glass_pane"));
+            targetBlocks.add(Block.getBlockFromName("glass"));
+            CommandBreakTask.run(targetBlocks);
+
             ci.cancel();
         }
 

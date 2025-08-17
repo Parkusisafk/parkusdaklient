@@ -10,15 +10,11 @@ import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.init.Blocks;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.*;
 import net.minecraft.world.World;
 
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Random;
-import java.util.Set;
+import java.util.*;
 
 public class TeleportTask extends Task {
     private final Minecraft mc = Minecraft.getMinecraft();
@@ -72,7 +68,7 @@ public class TeleportTask extends Task {
             BlockPos resultPos = result.getBlockPos();
 
             if(!teleported) {
-                if (!faceUntilFacingTarget(result.vec)) {
+                if (!faceUntilFacingTarget(result.getHitVec())) {
                     buttockelapsed++;
                     if (buttockelapsed > 60) {
                         mc.thePlayer.addChatMessage(new ChatComponentText(
@@ -164,7 +160,16 @@ public class TeleportTask extends Task {
     public boolean isFinished() {
         if (started && tickCounter > 30 && isAtDestination()) {
             mc.thePlayer.addChatMessage(new ChatComponentText("[TeleportTask] Successfully teleported."));
-            MacroCheckDetector.INSTANCE.setTeleporting(false);
+            mc.thePlayer.inventory.currentItem = 0;
+            new Thread(() -> {
+                try{
+                    Thread.sleep(1000);
+                    MacroCheckDetector.INSTANCE.setTeleporting(false);
+
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }).start();
             return true;
         } else if (failed){
             MacroCheckDetector.INSTANCE.setTeleporting(false);
@@ -172,6 +177,8 @@ public class TeleportTask extends Task {
             SkyblockMod.blockBreakingHandler.cancel();
             mc.thePlayer.addChatMessage(new ChatComponentText("§eStopped actions, failed to teleport :("));
             TaskManager.stopexecution = true;
+            DetectedMacroCheck.alert("Teleportation timed out (failed)");
+
             return true;
         }
         return false;
@@ -186,94 +193,212 @@ public class TeleportTask extends Task {
     }
 
 
-    public static BlockBreakingHandler.AimPoint getReachableVisibleFace(EntityPlayer player, World world, BlockPos target) {
-        Vec3 eyePos = new Vec3(player.posX, player.posY + player.getEyeHeight(), player.posZ);
-        IBlockState state = world.getBlockState(target);
-        Block block = state.getBlock();
+    public static class AimPoint {
+        private final BlockPos blockPos;
+        private final EnumFacing face;
+        private final Vec3 hitVec;
 
-        // Check if block is breakable: hardness >= 0 and player can harvest it (basic check)
-
-
-        // Thin blocks to skip face matching
-        Set<Block> thinBlocks = new HashSet<>(Arrays.asList(
-                Blocks.glass_pane,
-                Blocks.iron_bars
-                // add more thin blocks here if needed
-        ));
-
-        boolean skipFaceCheck = thinBlocks.contains(block);
-
-        System.out.println("[getReachableVisibleFace] Scanning block " + block.getLocalizedName() + " at " + target + " (skip face check: " + skipFaceCheck + ")");
-
-        // Scan 6x6 points on each face
-        for (EnumFacing face : EnumFacing.values()) {
-            for (int u = 0; u < 6; u++) {
-                for (int v = 0; v < 6; v++) {
-                    // fractions from 0.08 to 0.92 roughly (center of grid cell)
-                    double fu = (u + 0.5) / 6.0;
-                    double fv = (v + 0.5) / 6.0;
-
-                    // Calculate coordinates of point on face, slightly inside (0.49 offset)
-                    double x = target.getX() + 0.5;
-                    double y = target.getY() + 0.5;
-                    double z = target.getZ() + 0.5;
-
-                    // Assign offsets based on which axis the face lies on
-                    switch (face.getAxis()) {
-                        case X:
-                            x += face.getFrontOffsetX() * 0.49;
-                            y += (fu - 0.5);
-                            z += (fv - 0.5);
-                            break;
-                        case Y:
-                            y += face.getFrontOffsetY() * 0.49;
-                            x += (fu - 0.5);
-                            z += (fv - 0.5);
-                            break;
-                        case Z:
-                            z += face.getFrontOffsetZ() * 0.49;
-                            x += (fu - 0.5);
-                            y += (fv - 0.5);
-                            break;
-                    }
-
-                    Vec3 aimPoint = new Vec3(x, y, z);
-                    //System.out.println("[getReachableVisibleFace] Raytracing to point " + aimPoint + " on face " + face);
-
-                    MovingObjectPosition hit = world.rayTraceBlocks(eyePos, aimPoint);
-
-                    if (hit == null) {
-                        //    System.out.println("  ❌ Hit nothing");
-                        continue;
-                    }
-
-                    if (!hit.getBlockPos().equals(target)) {
-                        //    System.out.println("  ❌ Hit wrong block at " + hit.getBlockPos());
-                        continue;
-                    }
-
-                    if (!skipFaceCheck) {
-                        // For full blocks: Minecraft raytrace returns opposite face from aim direction
-                        if (hit.sideHit != face.getOpposite()) {
-                            //    System.out.println("  ❌ Hit wrong face: got " + hit.sideHit + ", expected " + face.getOpposite());
-                            continue;
-                        }
-                    } else {
-                        // For thin blocks, skip face check
-                        //    System.out.println("  ℹ️ Skipping face check for thin block");
-                    }
-
-                    // Passed all checks - found best aim point
-                    System.out.println("  ✅ Valid aim point found at " + aimPoint + " on face " + face);
-                    return new BlockBreakingHandler.AimPoint(aimPoint, face);
-                }
-            }
+        public AimPoint(BlockPos blockPos, EnumFacing face, Vec3 hitVec) {
+            this.blockPos = blockPos;
+            this.face = face;
+            this.hitVec = hitVec;
         }
 
-        System.out.println("[getReachableVisibleFace] No valid aim point found for block " + target);
+        public BlockPos getBlockPos() {
+            return blockPos;
+        }
+
+        public EnumFacing getFace() {
+            return face;
+        }
+
+        public Vec3 getHitVec() {
+            return hitVec;
+        }
+    }
+
+
+/**
+ * Robust 1.8.9-compatible raytrace to find a reachable visible face/point on a block.
+ * Returns an AimPoint(hitVec, face) or null if none found within reach.
+ */
+public static BlockBreakingHandler.AimPoint getReachableVisibleFace(EntityPlayer player, World world, BlockPos pos) {
+    final boolean DEBUG = false;
+    final double SERVER_SAFE_REACH = 70;   // client-side conservative reach for custom servers
+    final double MAX_REACH_CAP = 70;
+    final double EPS = 0.001;               // nudge past face; increase to 0.01 if too many inside-block misses
+    final int GRID = 6;                     // sample resolution per face
+
+    if (player == null || world == null || pos == null) return null;
+
+    // eye position
+    Vec3 eye = new Vec3(player.posX, player.posY + player.getEyeHeight(), player.posZ);
+
+    // choose reach: try vanilla playerController; fallback to conservative value, clamp to MAX_REACH_CAP
+    double reach;
+    try {
+        // PlayerControllerMP / PlayerControllerSP in 1.8.9 often expose getBlockReachDistance()
+        float r = 70; //cuz teleporting
+        if (r > 1.0F && r < MAX_REACH_CAP) reach = r;
+        else reach = SERVER_SAFE_REACH;
+    } catch (Throwable t) {
+        reach = SERVER_SAFE_REACH;
+    }
+    reach = Math.min(reach, MAX_REACH_CAP);
+
+    // block AABB (prefer selected box, fallback to collision box or full cube)
+    IBlockState state = world.getBlockState(pos);
+    Block block = state.getBlock();
+
+    AxisAlignedBB bb = null;
+    try {
+        bb = block.getSelectedBoundingBox(world, pos);
+    } catch (Throwable ignored) {}
+    if (bb == null) {
+        try {
+            AxisAlignedBB coll = block.getCollisionBoundingBox(world, pos, state);
+            if (coll != null) bb = coll;
+        } catch (Throwable ignored) {}
+    }
+    if (bb == null) bb = new AxisAlignedBB(pos.getX(), pos.getY(), pos.getZ(), pos.getX()+1, pos.getY()+1, pos.getZ()+1);
+
+    if (DEBUG) System.out.println("[getReachableVisibleFace] AABB=" + bb);
+
+    // quick reject by distance from eye to nearest point in AABB
+    double cx = Math.max(bb.minX, Math.min(eye.xCoord, bb.maxX));
+    double cy = Math.max(bb.minY, Math.min(eye.yCoord, bb.maxY));
+    double cz = Math.max(bb.minZ, Math.min(eye.zCoord, bb.maxZ));
+    double sqDistToBox = eye.squareDistanceTo(new Vec3(cx, cy, cz));
+    if (sqDistToBox > reach * reach) {
+        if (DEBUG) System.out.println("  → rejected by reach (to AABB) dist=" + Math.sqrt(sqDistToBox));
         return null;
     }
-    boolean faceUntilFacingTarget(Vec3 aimPoint) {
+
+    // face ordering: primary face is the one pointing TO the eye
+    Vec3 center = new Vec3((bb.minX + bb.maxX) * 0.5, (bb.minY + bb.maxY) * 0.5, (bb.minZ + bb.maxZ) * 0.5);
+    Vec3 toEye = eye.subtract(center);
+    EnumFacing primary = EnumFacing.getFacingFromVector((float) toEye.xCoord, (float) toEye.yCoord, (float) toEye.zCoord);
+
+    List<EnumFacing> faces = new ArrayList<EnumFacing>(Arrays.asList(EnumFacing.values()));
+    faces.sort(new Comparator<EnumFacing>() {
+        @Override public int compare(EnumFacing a, EnumFacing b) {
+            if (a == primary) return -1;
+            if (b == primary) return 1;
+            if (a == primary.getOpposite()) return 1;
+            if (b == primary.getOpposite()) return -1;
+            return 0;
+        }
+    });
+
+    // detect thin AABB to relax face checks
+    double sizeX = bb.maxX - bb.minX;
+    double sizeY = bb.maxY - bb.minY;
+    double sizeZ = bb.maxZ - bb.minZ;
+    final double THIN_THRESHOLD = 0.2;
+    boolean isThin = sizeX < THIN_THRESHOLD || sizeY < THIN_THRESHOLD || sizeZ < THIN_THRESHOLD;
+
+    // iterate faces and sample
+    for (EnumFacing face : faces) {
+        for (int u = 0; u < GRID; u++) {
+            for (int v = 0; v < GRID; v++) {
+                double fu = (u + 0.5) / (double) GRID;
+                double fv = (v + 0.5) / (double) GRID;
+
+                double fx=0, fy=0, fz=0;
+                switch (face.getAxis()) {
+                    case X:
+                        fx = (face == EnumFacing.EAST) ? bb.maxX : bb.minX;
+                        fy = bb.minY + fu * (bb.maxY - bb.minY);
+                        fz = bb.minZ + fv * (bb.maxZ - bb.minZ);
+                        break;
+                    case Y:
+                        fy = (face == EnumFacing.UP) ? bb.maxY : bb.minY;
+                        fx = bb.minX + fu * (bb.maxX - bb.minX);
+                        fz = bb.minZ + fv * (bb.maxZ - bb.minZ);
+                        break;
+                    default: // Z
+                        fz = (face == EnumFacing.SOUTH) ? bb.maxZ : bb.minZ;
+                        fx = bb.minX + fu * (bb.maxX - bb.minX);
+                        fy = bb.minY + fv * (bb.maxY - bb.minY);
+                        break;
+                }
+
+                Vec3 facePoint = new Vec3(fx, fy, fz);
+
+                // direction from eye to facePoint, normalized
+                Vec3 dir = facePoint.subtract(eye);
+                double dirLen = dir.lengthVector();
+                if (dirLen < 1e-6) {
+                    // eye almost exactly at point - use face normal small offset
+                    dir = new Vec3(face.getDirectionVec().getX() * 0.01,
+                            face.getDirectionVec().getY() * 0.01,
+                            face.getDirectionVec().getZ() * 0.01);
+                    dirLen = dir.lengthVector();
+                }
+                Vec3 dirNorm = new Vec3(dir.xCoord / dirLen, dir.yCoord / dirLen, dir.zCoord / dirLen);
+
+                // endpoint slightly past the face so the ray crosses INTO the block (avoids start/end-inside problems)
+                double endpointDistance = dirLen + EPS;
+                Vec3 end = eye.addVector(dirNorm.xCoord * endpointDistance,
+                        dirNorm.yCoord * endpointDistance,
+                        dirNorm.zCoord * endpointDistance);
+
+                // try raytrace (1.8.9 overloads available)
+                MovingObjectPosition mop = null;
+                try {
+                    // try the more detailed signature: (start, end, stopOnLiquid, ignoreBlockWithoutBoundingBox, returnLastUncollidableBlock)
+                    mop = world.rayTraceBlocks(eye, end, false, true, false);
+                } catch (Throwable t) {
+                    try {
+                        mop = world.rayTraceBlocks(eye, end);
+                    } catch (Throwable ignored) {}
+                }
+
+                if (mop == null) {
+                    if (DEBUG) System.out.println("  ❌ ray missed (face " + face + ")");
+                    continue;
+                }
+
+                // ensure block position matched
+                BlockPos hitPos;
+                try {
+                    hitPos = mop.getBlockPos();
+                } catch (Throwable t) {
+                    // some builds expose the field directly
+                    hitPos = (mop.getBlockPos() != null) ? mop.getBlockPos() : pos;
+                }
+                if (!pos.equals(hitPos)) {
+                    if (DEBUG) System.out.println("  ❌ hit wrong block " + hitPos + " expected " + pos);
+                    continue;
+                }
+
+                // face check: allow a bit of slop for thin or very close hits
+                boolean faceMatches = (mop.sideHit == face);
+                double sqDistHit = eye.squareDistanceTo(mop.hitVec);
+                boolean veryClose = sqDistHit <= 0.6 * 0.6;
+
+                if (!faceMatches && !isThin && !veryClose) {
+                    if (DEBUG) System.out.println("  ❌ face mismatch (got " + mop.sideHit + " expected " + face + ")");
+                    continue;
+                }
+
+                // enforce reach using the actual hit vector
+                if (sqDistHit > reach * reach) {
+                    if (DEBUG) System.out.println("  ❌ beyond reach dist=" + Math.sqrt(sqDistHit) + " reach=" + reach);
+                    continue;
+                }
+
+                if (DEBUG) System.out.println("  ✅ valid hit at " + mop.hitVec + " face " + mop.sideHit);
+                return new BlockBreakingHandler.AimPoint(mop.getBlockPos(), mop.sideHit, mop.hitVec);
+            }
+        }
+    }
+
+    if (DEBUG) System.out.println("  → no aim point found for " + pos);
+    return null;
+}
+
+boolean faceUntilFacingTarget(Vec3 aimPoint) {
         if (aimPoint == null) return false;
 
         Vec3 eye = new Vec3(

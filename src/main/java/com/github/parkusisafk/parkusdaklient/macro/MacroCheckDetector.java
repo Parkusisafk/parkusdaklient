@@ -4,6 +4,7 @@ import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.item.EntityArmorStand;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.init.Blocks;
 import net.minecraft.util.*;
@@ -76,6 +77,19 @@ boolean initialised = false;
     }
 
     public static List<Block> getWhitelistedBlocks() {
+
+        monitorWhitelist.clear();
+        try (BufferedReader reader = new BufferedReader(new FileReader(whitelistFile))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (!line.trim().isEmpty()) {
+                    Block block = Block.getBlockFromName(line.trim());
+                    if (block != null) monitorWhitelist.add(block);
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
         return new ArrayList<>(monitorWhitelist);
     }
     public static void saveWhitelistToFile() {
@@ -227,15 +241,35 @@ public static boolean activeMacroDetection = false;
                     String type = entity.getClass().getSimpleName();
 
                     if (!allowedEntities.contains(type)) {
-                        // Check if player can see this entity
-                        if (player.canEntityBeSeen(entity)) {
-                            if (entity.isInvisible()) {
-                                DetectedMacroCheck.alert("⚠️ Entity is invisible: " + type);
-                            }
+                        // Whitelist exceptions
+                        boolean whitelisted = false;
 
-                            else DetectedMacroCheck.alert("Unusual visible entity nearby: " + type);
+                        // Iron Golem, Magma Cube, Goblins
+                        if (type.equals("EntityIronGolem") || type.equals("EntityMagmaCube") || type.equals("Goblin")) {
+                            whitelisted = true;
+                        }
+
+                        // Armor stand name check
+                        if (entity instanceof EntityArmorStand && entity.hasCustomName()) {
+                            String name = entity.getCustomNameTag().toLowerCase();
+                            if (name.contains("automaton") || name.contains("yog") || name.contains("goblins")) {
+                                whitelisted = true;
+                            }
+                        }
+
+                        if (!whitelisted) {
+                            // Check if player can see this entity
+                            if (player.canEntityBeSeen(entity)) {
+                                if (entity.isInvisible()) {
+                                    DetectedMacroCheck.alert("⚠️ Entity is invisible: " + type);
+                                } else {
+                                    DetectedMacroCheck.alert("Unusual visible entity nearby: " + type);
+                                }
+                            }
                         }
                     }
+
+
                 }
             }
 
